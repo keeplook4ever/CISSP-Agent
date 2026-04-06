@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from database.models import (
     get_daily_progress, get_domain_stats, get_exam_sessions,
-    get_current_day_number,
+    get_current_day_number, get_study_content_stats,
 )
 from config.domains import DOMAINS
 
@@ -23,6 +23,8 @@ def get_overall_progress() -> dict:
 
     current_day = get_current_day_number()
 
+    study_stats = get_study_content_stats()
+
     return {
         "current_day": current_day,
         "total_attempts": total_attempts,
@@ -33,6 +35,8 @@ def get_overall_progress() -> dict:
         "domain_stats": stats,
         "recent_daily": daily,
         "recent_exams": exams,
+        "study_content_stats": study_stats,
+        "total_topics_studied": sum(s["topics_studied"] for s in study_stats),
     }
 
 

@@ -7,7 +7,7 @@ from rich import box
 
 from analysis.progress_tracker import get_overall_progress, get_domains_needing_attention
 from analysis.weakness_detector import detect_and_save_weaknesses
-from ui.cli.tables import print_domain_stats_table, print_weakness_table
+from ui.cli.tables import print_domain_stats_table, print_weakness_table, print_study_progress_table
 from config.domains import DOMAINS
 from config.settings import settings
 
@@ -36,6 +36,27 @@ def show_overall_report() -> None:
 
     # 域详情表
     print_domain_stats_table(prog["domain_stats"])
+
+    # 学习模式进度
+    total_studied = prog.get("total_topics_studied", 0)
+    console.print()
+    if total_studied == 0:
+        console.print(
+            Panel(
+                "  尚未使用学习模式\n"
+                "  进入主菜单 [bold cyan][1] 学习模式[/bold cyan] 开始知识点学习",
+                title="📖 知识点学习进度",
+                border_style="dim",
+                box=box.ROUNDED,
+            )
+        )
+    else:
+        domains_covered = len(prog.get("study_content_stats", []))
+        console.print(
+            f"  📖 已学习知识点：[cyan]{total_studied}[/cyan] 个"
+            f"（覆盖 [cyan]{domains_covered}[/cyan] 个域）"
+        )
+        print_study_progress_table(prog.get("study_content_stats", []))
 
     # 薄弱点
     console.print("\n[bold]正在检测薄弱点...[/bold]")

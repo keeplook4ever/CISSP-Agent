@@ -81,6 +81,39 @@ def print_session_summary(
     console.print(f"{'='*40}\n")
 
 
+def print_study_progress_table(stats: list[dict]) -> None:
+    """打印学习模式知识点学习进度表"""
+    table = Table(title="📖 知识点学习进度", box=box.ROUNDED, border_style="cyan")
+    table.add_column("域", style="cyan", width=4)
+    table.add_column("名称", min_width=14)
+    table.add_column("已学/总计", justify="center", min_width=10)
+    table.add_column("完成度", justify="right", min_width=10)
+    table.add_column("最近学习", justify="center", min_width=12)
+
+    stats_map = {s["domain_id"]: s for s in stats}
+    for domain_id, domain in DOMAINS.items():
+        s = stats_map.get(domain_id, {})
+        total_subs = len(domain.get("subdomains", [])) + 1  # +1 = 整体概述
+        studied = s.get("topics_studied", 0)
+        last_at = (s.get("last_studied_at") or "")[:10] or "—"
+
+        if studied == 0:
+            ratio_str = Text(f"0 / {total_subs}", style="dim")
+            pct_str = Text("—", style="dim")
+        else:
+            pct = studied / total_subs * 100
+            ratio_str = f"{studied} / {total_subs}"
+            if pct >= 80:
+                pct_str = Text(f"{pct:.0f}%", style="bold green")
+            elif pct >= 50:
+                pct_str = Text(f"{pct:.0f}%", style="yellow")
+            else:
+                pct_str = Text(f"{pct:.0f}%", style="red")
+
+        table.add_row(str(domain_id), domain["name"], ratio_str, pct_str, last_at)
+    console.print(table)
+
+
 def print_weakness_table(weaknesses: list[dict]) -> None:
     """打印薄弱点列表"""
     if not weaknesses:

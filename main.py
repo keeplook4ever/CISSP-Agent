@@ -117,6 +117,8 @@ def run_interactive() -> None:
         sys.exit(1)
 
     from ui.cli.menus import print_main_banner, print_main_menu, prompt_menu_choice
+    from modes.daily_diagnostic import run_daily_diagnostic
+    run_daily_diagnostic()
 
     while True:
         try:

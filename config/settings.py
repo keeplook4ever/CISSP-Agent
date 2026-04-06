@@ -50,5 +50,11 @@ class Settings:
     # 题目缓存：每个子域最少保有题目数，不足时在线补充
     MIN_QUESTIONS_PER_SUBDOMAIN: int = 30
 
+    # 每日诊断：题目总数
+    DAILY_DIAGNOSTIC_COUNT: int = 30
+
+    # 每日诊断：各域达标所需最少答题次数（不足则不纳入"全部达标"判断）
+    DOMAIN_PASS_MIN_ATTEMPTS: int = 100
+
 
 settings = Settings()

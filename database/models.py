@@ -308,6 +308,21 @@ def save_study_content(domain_id: int, topic: str, content: str) -> None:
     conn.commit()
 
 
+def get_study_content_stats() -> list[dict]:
+    """按域统计知识点学习情况（来源：study_content_cache）"""
+    conn = get_connection()
+    cur = conn.execute(
+        """SELECT domain_id,
+                  COUNT(*)        AS topics_studied,
+                  SUM(char_count) AS total_chars,
+                  MAX(updated_at) AS last_studied_at
+           FROM study_content_cache
+           GROUP BY domain_id
+           ORDER BY domain_id"""
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
 def count_questions_by_subdomain(domain_id: int, subdomain: str) -> int:
     conn = get_connection()
     cur = conn.execute(
