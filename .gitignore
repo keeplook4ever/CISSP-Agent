@@ -1,6 +1,7 @@
 # ===== Python / Backend =====
 __pycache__/
 *.pyc
+*.pyc/
 *.py[cod]
 *.pyo
 *.pyd
