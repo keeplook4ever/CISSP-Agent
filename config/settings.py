@@ -44,5 +44,11 @@ class Settings:
     # 薄弱点阈值（正确率低于此值则标记为薄弱）
     WEAKNESS_THRESHOLD: float = 0.70
 
+    # 知识点缓存：内容字符数低于此值视为不完整，触发在线补充
+    MIN_CONTENT_CHARS: int = 500
+
+    # 题目缓存：每个子域最少保有题目数，不足时在线补充
+    MIN_QUESTIONS_PER_SUBDOMAIN: int = 30
+
 
 settings = Settings()

@@ -19,9 +19,10 @@ def get_connection() -> sqlite3.Connection:
 
 
 def init_database() -> None:
-    sql_path = Path(__file__).parent / "migrations" / "v1_init.sql"
+    migrations_dir = Path(__file__).parent / "migrations"
     conn = get_connection()
-    conn.executescript(sql_path.read_text(encoding="utf-8"))
+    for sql_file in sorted(migrations_dir.glob("v*.sql")):
+        conn.executescript(sql_file.read_text(encoding="utf-8"))
     conn.commit()
 
 

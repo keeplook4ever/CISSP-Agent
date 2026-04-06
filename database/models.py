@@ -281,6 +281,43 @@ def get_all_plan_days() -> list[dict]:
     return [dict(row) for row in cur.fetchall()]
 
 
+# ───────────── 知识点内容缓存 ─────────────
+
+def get_cached_study_content(domain_id: int, topic: str) -> Optional[str]:
+    cache_key = f"{domain_id}|{topic}"
+    conn = get_connection()
+    cur = conn.execute(
+        "SELECT content FROM study_content_cache WHERE cache_key = ?", (cache_key,)
+    )
+    row = cur.fetchone()
+    return row["content"] if row else None
+
+
+def save_study_content(domain_id: int, topic: str, content: str) -> None:
+    cache_key = f"{domain_id}|{topic}"
+    conn = get_connection()
+    conn.execute(
+        """INSERT INTO study_content_cache (cache_key, domain_id, topic, content, char_count)
+           VALUES (?, ?, ?, ?, ?)
+           ON CONFLICT(cache_key) DO UPDATE SET
+               content    = excluded.content,
+               char_count = excluded.char_count,
+               updated_at = CURRENT_TIMESTAMP""",
+        (cache_key, domain_id, topic, content, len(content)),
+    )
+    conn.commit()
+
+
+def count_questions_by_subdomain(domain_id: int, subdomain: str) -> int:
+    conn = get_connection()
+    cur = conn.execute(
+        "SELECT COUNT(*) as cnt FROM questions WHERE domain_id=? AND subdomain=? AND is_active=1",
+        (domain_id, subdomain),
+    )
+    row = cur.fetchone()
+    return row["cnt"] if row else 0
+
+
 def get_exam_sessions(limit: int = 10) -> list[dict]:
     conn = get_connection()
     cur = conn.execute(

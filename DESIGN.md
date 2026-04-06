@@ -30,9 +30,11 @@ cissp-agent/
 │   ├── settings.py              # 从环境变量读取配置（ANTHROPIC_API_KEY）
 │   └── domains.py               # 8 个域的元数据（名称/权重/子域列表）
 ├── database/
-│   ├── connection.py            # SQLite 连接管理
+│   ├── connection.py            # SQLite 连接管理（自动按序执行 v*.sql 迁移）
 │   ├── models.py                # 建表 + CRUD 操作
-│   └── migrations/v1_init.sql   # 初始化 SQL
+│   └── migrations/
+│       ├── v1_init.sql          # 初始化 SQL（7 张核心表）
+│       └── v2_content_cache.sql # 知识点内容缓存表
 ├── questions/
 │   ├── loader.py                # 加载本地 JSON 题库
 │   └── bank/
@@ -43,7 +45,8 @@ cissp-agent/
 ├── ai/
 │   ├── client.py                # Anthropic SDK 封装
 │   ├── prompts.py               # 所有 System Prompt（中文）
-│   ├── question_generator.py    # 动态题目生成
+│   ├── content_cache.py         # 知识点内容缓存（命中本地/在线补充/刷新）
+│   ├── question_generator.py    # 动态题目生成（补缺口，不重复消耗 token）
 │   ├── answer_analyzer.py       # 答案深度解析
 │   └── weakness_analyzer.py     # 薄弱点分析报告
 ├── modes/
@@ -66,7 +69,7 @@ cissp-agent/
 
 ---
 
-## 数据库 Schema（7 张核心表）
+## 数据库 Schema（8 张核心表）
 
 | 表名 | 说明 |
 |------|------|
@@ -77,6 +80,7 @@ cissp-agent/
 | `daily_progress` | 每日完成情况 |
 | `weakness_records` | 薄弱点识别记录 |
 | `study_plan` | 50 天计划 |
+| `study_content_cache` | 知识点 AI 讲解内容本地缓存（v2 新增） |
 
 ---
 
@@ -139,6 +143,34 @@ cissp-agent/
 - `ANSWER_EXPLANATION`：深度解析（为什么对/为什么其他选项错/记忆技巧）
 - `WEAKNESS_ANALYSIS`：分析答题数据，生成个性化改进报告
 - `STUDY_GUIDE`：知识点讲解（CISSP 管理者思维视角）
+
+### 6. 本地内容缓存机制（`ai/content_cache.py`）
+
+**设计目标**：避免重复消耗 token，同时保证离线可用。
+
+**知识点内容缓存（`study_content_cache` 表）：**
+
+```
+学习同一主题
+    ├─ 命中缓存 & 字符数 ≥ MIN_CONTENT_CHARS(500) → 直接展示本地内容
+    │      └─ 在线模式下可按 [r] 手动触发刷新
+    ├─ 命中缓存但内容不足 → 提示不完整，在线补充后更新缓存
+    ├─ 无缓存 & 在线 → 流式获取，自动存入缓存
+    └─ 无缓存 & 离线 → 提示设置 ANTHROPIC_API_KEY
+```
+
+**题目缓存（`questions` 表，`question_generator.py`）：**
+
+- 每次生成前查询该子域已有题数
+- 已有题数 ≥ `MIN_QUESTIONS_PER_SUBDOMAIN`(30) → 直接返回空列表，不发起 API 请求
+- 已有题数不足 → 仅请求缺口数量（`min(count, needed)`）
+
+**相关配置（`config/settings.py`）：**
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `MIN_CONTENT_CHARS` | 500 | 缓存内容充足性阈值 |
+| `MIN_QUESTIONS_PER_SUBDOMAIN` | 30 | 每子域题目保有下限 |
 
 ### 6. 50 天学习计划（`plan/study_plan.py`）
 
