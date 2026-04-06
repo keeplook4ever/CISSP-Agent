@@ -1,0 +1,82 @@
+{
+  "domain_id": 8,
+  "domain_name": "软件开发安全",
+  "version": "2024.1",
+  "questions": [
+    {
+      "id": "D8-001",
+      "subdomain": "安全软件开发生命周期（SDLC）",
+      "difficulty": 1,
+      "question": "DevSecOps中'安全左移'（Shift Left Security）的含义是什么？",
+      "options": {
+        "A": "在软件开发生命周期的早期阶段（设计/编码）就引入安全活动，而非等到部署前",
+        "B": "将安全团队迁移到开发部门左侧的办公室",
+        "C": "使用从左向右书写的编程语言",
+        "D": "安全测试只在最终阶段进行"
+      },
+      "correct": "A",
+      "explanation": "安全左移原则：越早发现安全缺陷，修复成本越低（需求阶段修复成本是生产阶段的1/100）。实践：①需求阶段——安全需求定义、威胁建模（STRIDE）②设计阶段——安全架构审查③编码阶段——SAST（静态分析）、安全编码标准④测试阶段——DAST（动态分析）、渗透测试⑤部署——RASP、WAF⑥运营——持续监控。DevSecOps将安全自动化融入CI/CD流水线。",
+      "tags": ["DevSecOps", "安全左移", "SDLC", "CI/CD"]
+    },
+    {
+      "id": "D8-002",
+      "subdomain": "应用安全测试",
+      "difficulty": 2,
+      "question": "OWASP Top 10中，SQL注入的最有效防御措施是什么？",
+      "options": {
+        "A": "参数化查询（Prepared Statements）和存储过程，配合输入验证",
+        "B": "过滤所有特殊字符",
+        "C": "使用HTTPS加密数据库连接",
+        "D": "增加数据库密码复杂度"
+      },
+      "correct": "A",
+      "explanation": "SQL注入防御：①参数化查询（首选）——将数据和SQL命令分离，用户输入不会被解释为SQL代码；②存储过程——预编译SQL减少动态拼接；③ORM框架——自动处理参数化；④输入验证——白名单过滤，最小化有效字符集；⑤最小权限——数据库账号只赋予必要权限（读写不给DROP）；⑥WAF——额外一层过滤。转义（Escaping）是次选，参数化是首选。",
+      "tags": ["SQL注入", "参数化查询", "OWASP", "输入验证"]
+    },
+    {
+      "id": "D8-003",
+      "subdomain": "应用安全测试",
+      "difficulty": 2,
+      "question": "SAST（静态应用安全测试）和DAST（动态应用安全测试）的区别是什么？",
+      "options": {
+        "A": "SAST分析源代码（不运行程序）；DAST在运行时从外部攻击应用（黑盒）",
+        "B": "SAST比DAST更贵",
+        "C": "DAST分析源代码；SAST测试运行中的应用",
+        "D": "两者功能完全相同"
+      },
+      "correct": "A",
+      "explanation": "应用安全测试类型：SAST（静态）——白盒测试，分析源代码/字节码找漏洞，在CI/CD早期运行，无需部署，工具：Checkmarx/Fortify。DAST（动态）——黑盒测试，模拟攻击运行中的应用，发现SAST无法发现的运行时漏洞，工具：OWASP ZAP/Burp Suite。IAST（交互式）——结合两者，在测试运行时插桩分析。SCA（软件成分分析）——扫描第三方依赖中的已知漏洞（CVE）。",
+      "tags": ["SAST", "DAST", "IAST", "SCA", "安全测试"]
+    },
+    {
+      "id": "D8-004",
+      "subdomain": "评估供应商和第三方安全",
+      "difficulty": 2,
+      "question": "软件供应链攻击（如SolarWinds事件）的防御措施是什么？",
+      "options": {
+        "A": "软件物料清单（SBOM）、代码签名验证、SCA扫描依赖漏洞、最小权限原则",
+        "B": "禁止使用所有第三方软件",
+        "C": "只从官方网站下载软件",
+        "D": "使用杀毒软件扫描所有软件包"
+      },
+      "correct": "A",
+      "explanation": "软件供应链安全：SolarWinds事件中攻击者污染了合法软件更新包，影响数千客户。防御体系：①SBOM（软件物料清单）——完整记录所有依赖组件；②SCA——持续扫描依赖中的CVE；③代码签名——验证软件来源完整性；④构建环境安全——CI/CD管道隔离，防止构建时注入；⑤最小权限——第三方软件不得拥有超出需要的系统权限；⑥供应商安全评估——供应商的安全控制审查。",
+      "tags": ["供应链安全", "SBOM", "SolarWinds", "SCA", "代码签名"]
+    },
+    {
+      "id": "D8-005",
+      "subdomain": "开发环境安全控制",
+      "difficulty": 2,
+      "question": "跨站脚本攻击（XSS）的三种类型和防御措施是什么？",
+      "options": {
+        "A": "反射型/存储型/DOM型XSS；防御：输出编码、CSP策略、HttpOnly Cookie",
+        "B": "XSS只有一种类型，可通过HTTPS防御",
+        "C": "XSS攻击只影响服务器端",
+        "D": "防火墙可以完全阻止XSS攻击"
+      },
+      "correct": "A",
+      "explanation": "XSS三种类型：①反射型（Reflected）——恶意脚本通过URL参数注入，即时执行（需诱导用户点击）；②存储型（Stored/Persistent）——恶意脚本存入数据库，所有访问该页面的用户都受影响（最危险）；③DOM型——通过修改DOM执行，不经过服务器。防御：①输出编码（Output Encoding）——HTML/JS/URL编码用户输入；②CSP（内容安全策略）——限制脚本来源；③HttpOnly Cookie——防止JS读取会话Cookie；④参数化HTML模板。",
+      "tags": ["XSS", "跨站脚本", "CSP", "输出编码", "HttpOnly"]
+    }
+  ]
+}

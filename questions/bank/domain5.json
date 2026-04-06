@@ -1,0 +1,82 @@
+{
+  "domain_id": 5,
+  "domain_name": "身份与访问管理",
+  "version": "2024.1",
+  "questions": [
+    {
+      "id": "D5-001",
+      "subdomain": "身份验证机制",
+      "difficulty": 1,
+      "question": "多因素认证（MFA）的三种认证因素类型是什么？",
+      "options": {
+        "A": "知识因素（你知道的）、持有因素（你拥有的）、生物特征因素（你是谁）",
+        "B": "密码、PIN码、安全问题",
+        "C": "用户名、密码、验证码",
+        "D": "身份证、护照、驾照"
+      },
+      "correct": "A",
+      "explanation": "MFA三种因素：①知识因素（Something You Know）——密码、PIN、安全问题；②持有因素（Something You Have）——手机/Token/智能卡；③生物特征（Something You Are）——指纹/虹膜/人脸。MFA要求至少两种不同类型因素组合，仅使用两个密码不算MFA（同类型）。",
+      "tags": ["MFA", "认证因素", "身份验证"]
+    },
+    {
+      "id": "D5-002",
+      "subdomain": "授权机制",
+      "difficulty": 2,
+      "question": "基于角色的访问控制（RBAC）和基于属性的访问控制（ABAC）的主要区别是什么？",
+      "options": {
+        "A": "RBAC基于用户角色授权；ABAC基于用户/资源/环境多维属性动态决策，更灵活",
+        "B": "RBAC比ABAC更现代",
+        "C": "ABAC只适用于云环境",
+        "D": "两者完全相同"
+      },
+      "correct": "A",
+      "explanation": "RBAC：用户被分配到角色，角色被授予权限（如：财务角色可访问财务报表）。简单高效但缺乏细粒度。ABAC：基于主体属性（部门/职级）+资源属性（分类/所有者）+环境属性（时间/位置）动态评估。例如：'只有财务部门员工在工作时间从公司网络才能访问财务报表'。ABAC是零信任架构的基础。",
+      "tags": ["RBAC", "ABAC", "访问控制", "零信任"]
+    },
+    {
+      "id": "D5-003",
+      "subdomain": "联合身份与单点登录",
+      "difficulty": 2,
+      "question": "SAML 2.0在企业SSO中扮演什么角色？",
+      "options": {
+        "A": "XML格式的联合认证标准，实现身份提供商（IdP）和服务提供商（SP）之间的身份断言传递",
+        "B": "SAML是一种密码加密算法",
+        "C": "SAML只用于移动应用认证",
+        "D": "SAML替代了所有其他认证协议"
+      },
+      "correct": "A",
+      "explanation": "SAML（安全断言标记语言）SSO流程：①用户访问SP（如Salesforce）②SP重定向到IdP（如公司AD FS）③用户在IdP完成认证④IdP返回SAML断言（XML格式，包含用户身份和属性）⑤SP验证断言，授予访问。对比：OAuth 2.0用于授权（第三方资源访问），OIDC（OpenID Connect）用于认证，SAML更适合企业SSO场景。",
+      "tags": ["SAML", "SSO", "联合身份", "IdP", "SP"]
+    },
+    {
+      "id": "D5-004",
+      "subdomain": "身份和访问攻击防护",
+      "difficulty": 2,
+      "question": "Kerberos认证协议中，TGT（票据授予票据）的作用是什么？",
+      "options": {
+        "A": "用户首次向KDC认证后获得TGT，后续用TGT换取各服务票据，无需重复输入密码",
+        "B": "TGT是用户密码的加密版本",
+        "C": "TGT用于加密网络流量",
+        "D": "TGT是防火墙规则"
+      },
+      "correct": "A",
+      "explanation": "Kerberos三角色：KDC（密钥分发中心）=AS（认证服务）+TGS（票据授予服务）。流程：①AS认证用户，发放TGT（有时效，通常8小时）②用户用TGT向TGS请求服务票据（Service Ticket）③用服务票据直接访问服务。优点：密码只在初始认证时使用，之后通过票据传递。缺点：Kerberoasting攻击（离线破解服务账户密码）、Pass-the-Ticket攻击。",
+      "tags": ["Kerberos", "TGT", "KDC", "SSO", "Pass-the-Ticket"]
+    },
+    {
+      "id": "D5-005",
+      "subdomain": "身份和访问配置管理",
+      "difficulty": 2,
+      "question": "特权访问管理（PAM）解决方案主要防范什么威胁？",
+      "options": {
+        "A": "管控特权账号（管理员/root）滥用，提供即时访问、会话录制和密码轮换",
+        "B": "PAM只用于物理访问控制",
+        "C": "PAM替代防火墙",
+        "D": "PAM只适用于云环境"
+      },
+      "correct": "A",
+      "explanation": "PAM（特权访问管理）是零信任的重要组成：核心功能①特权账号发现和纳管②即时访问（JIT）——按需临时授予特权，用完即收③密码保险库——自动轮换特权密码，管理员不知道实际密码④会话录制——所有特权操作留存审计记录⑤特权会话隔离——通过PAM代理访问，不暴露目标凭证。代表产品：CyberArk、BeyondTrust、Thycotic。",
+      "tags": ["PAM", "特权账号", "JIT", "会话录制", "内部威胁"]
+    }
+  ]
+}

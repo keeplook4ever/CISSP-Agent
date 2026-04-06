@@ -1,0 +1,457 @@
+{
+  "domain_id": 4,
+  "domain_name": "通信与网络安全",
+  "version": "2024.1",
+  "questions": [
+    {
+      "id": "D4-001",
+      "subdomain": "网络架构安全设计",
+      "difficulty": 1,
+      "question": "OSI模型中，TLS/SSL协议工作在哪一层？",
+      "options": {
+        "A": "表示层（第6层）和会话层（第5层）之间",
+        "B": "网络层（第3层）",
+        "C": "数据链路层（第2层）",
+        "D": "应用层（第7层）"
+      },
+      "correct": "A",
+      "explanation": "TLS/SSL工作在OSI模型的第5-6层之间（会话层和表示层）。它为上层应用提供传输安全，加密HTTP流量变为HTTPS。记忆技巧：TLS是传输层安全（Transport Layer Security），但实际工作在会话/表示层，为应用层数据提供端到端加密。",
+      "tags": ["TLS", "SSL", "OSI模型", "加密协议"]
+    },
+    {
+      "id": "D4-002",
+      "subdomain": "网络架构安全设计",
+      "difficulty": 2,
+      "question": "防火墙类型中，状态检测防火墙（Stateful Inspection）比包过滤防火墙（Packet Filtering）的优势是什么？",
+      "options": {
+        "A": "状态检测可以追踪连接状态，识别不属于已建立会话的异常数据包",
+        "B": "状态检测防火墙速度更快",
+        "C": "状态检测防火墙不需要规则配置",
+        "D": "状态检测防火墙可以深度解析应用层内容"
+      },
+      "correct": "A",
+      "explanation": "防火墙进化：①包过滤（第3-4层）——只检查单个数据包的IP/端口，无状态，可被IP欺骗绕过②状态检测（第3-4层+会话）——维护连接状态表，只允许合法会话的数据包通过③应用层防火墙/代理防火墙——检查第7层内容④下一代防火墙（NGFW）——集成IDS/IPS、应用识别、用户身份。状态检测是最常见的企业防火墙类型。",
+      "tags": ["防火墙", "状态检测", "包过滤", "NGFW"]
+    },
+    {
+      "id": "D4-003",
+      "subdomain": "安全通信渠道",
+      "difficulty": 2,
+      "question": "IPsec的两种运行模式（传输模式和隧道模式）的区别是什么？",
+      "options": {
+        "A": "传输模式加密有效载荷，保留原始IP头；隧道模式加密整个原始数据包并添加新IP头",
+        "B": "传输模式用于VPN；隧道模式用于端到端通信",
+        "C": "传输模式比隧道模式更安全",
+        "D": "两种模式完全相同"
+      },
+      "correct": "A",
+      "explanation": "IPsec模式：①传输模式（Transport Mode）——只加密IP数据包的有效载荷（数据部分），原始IP头不变，用于主机到主机通信②隧道模式（Tunnel Mode）——加密整个原始IP数据包（包括原始IP头），并封装在新的IP数据包中，用于VPN网关到网关通信。IPsec两个协议：AH（认证头，只提供完整性）和ESP（封装安全载荷，提供加密+完整性）。",
+      "tags": ["IPsec", "VPN", "传输模式", "隧道模式", "AH", "ESP"]
+    },
+    {
+      "id": "D4-004",
+      "subdomain": "网络组件安全",
+      "difficulty": 1,
+      "question": "VLAN（虚拟局域网）在网络安全中的主要作用是什么？",
+      "options": {
+        "A": "网络分段，隔离不同安全级别的流量，限制广播域",
+        "B": "加速网络传输速度",
+        "C": "替代防火墙的安全功能",
+        "D": "提供无线网络覆盖"
+      },
+      "correct": "A",
+      "explanation": "VLAN通过逻辑分段将物理网络划分为多个独立的虚拟网络：①安全隔离——不同部门（财务/研发/访客）流量相互隔离②减小广播域——限制广播风暴③简化管理——无需物理重新布线。安全注意：VLAN跳跃攻击（VLAN Hopping）——通过双标记（Double Tagging）或交换机欺骗绕过VLAN隔离。防御：禁用本征VLAN、明确配置Trunk端口。",
+      "tags": ["VLAN", "网络分段", "广播域", "VLAN跳跃"]
+    },
+    {
+      "id": "D4-005",
+      "subdomain": "网络架构安全设计",
+      "difficulty": 2,
+      "question": "DMZ（非军事区）网络架构的主要用途是什么？",
+      "options": {
+        "A": "放置需要对外提供服务的服务器（Web/邮件），同时隔离内网免受直接外部访问",
+        "B": "存储最机密的数据",
+        "C": "专门用于无线网络访问",
+        "D": "替代内网中的所有服务器"
+      },
+      "correct": "A",
+      "explanation": "DMZ（隔离区）是介于外网（Internet）和内网之间的缓冲区：典型架构——外部防火墙→DMZ（Web/邮件/DNS服务器）→内部防火墙→内网。目的：让外部用户可以访问DMZ中的公共服务，但无法直接访问内网。如果DMZ服务器被攻破，攻击者仍需突破内部防火墙才能进入内网。这是'深度防御'的经典实现。",
+      "tags": ["DMZ", "网络架构", "深度防御", "防火墙"]
+    },
+    {
+      "id": "D4-006",
+      "subdomain": "网络组件安全",
+      "difficulty": 2,
+      "question": "ARP欺骗（ARP Spoofing）攻击的防御措施是什么？",
+      "options": {
+        "A": "动态ARP检测（DAI）和端口安全（Port Security）",
+        "B": "使用HTTPS替代HTTP",
+        "C": "关闭所有交换机端口",
+        "D": "增加防火墙规则"
+      },
+      "correct": "A",
+      "explanation": "ARP欺骗：攻击者发送伪造ARP响应，将自己的MAC地址与目标IP绑定，拦截网络流量（中间人攻击的前提之一）。防御：①动态ARP检测（DAI）——交换机验证ARP包是否合法（比对DHCP侦听绑定表）②静态ARP条目——关键服务器使用静态ARP绑定③端口安全——限制每个端口学习的MAC地址数量④使用HTTPS等加密协议（即使被中间人也无法解密）。",
+      "tags": ["ARP欺骗", "DAI", "中间人攻击", "交换机安全"]
+    },
+    {
+      "id": "D4-007",
+      "subdomain": "安全通信渠道",
+      "difficulty": 1,
+      "question": "WPA3比WPA2在无线安全方面的主要改进是什么？",
+      "options": {
+        "A": "使用SAE（同时认证对等体）替代PSK握手，防止离线字典攻击；提供前向保密",
+        "B": "WPA3使用更长的SSID",
+        "C": "WPA3不需要密码",
+        "D": "WPA3仅适用于5GHz频段"
+      },
+      "correct": "A",
+      "explanation": "WPA3改进：①SAE（Dragonfly握手）替代PSK——即使密码被盗，过去的会话流量也无法解密（前向保密，Perfect Forward Secrecy）②抵抗离线字典攻击——WPA2 PMKID攻击在WPA3中失效③WPA3-Enterprise——使用192位加密套件④增强开放网络安全（OWE）——即使无密码的Wi-Fi也加密流量。推荐企业使用WPA3-Enterprise配合802.1X（RADIUS）认证。",
+      "tags": ["WPA3", "WPA2", "SAE", "无线安全", "前向保密"]
+    },
+    {
+      "id": "D4-008",
+      "subdomain": "网络组件安全",
+      "difficulty": 2,
+      "question": "IDS（入侵检测系统）和IPS（入侵防御系统）最主要的区别是什么？",
+      "options": {
+        "A": "IDS只检测并告警；IPS不仅检测还可以主动阻断恶意流量",
+        "B": "IDS部署在网络外部；IPS部署在内网",
+        "C": "IDS使用签名检测；IPS使用行为检测",
+        "D": "两者功能完全相同"
+      },
+      "correct": "A",
+      "explanation": "IDS（入侵检测系统）：被动监控，检测到威胁后产生告警，不阻断流量，通常以旁路方式部署（不在数据通路上）。IPS（入侵防御系统）：主动防护，检测到威胁后立即阻断流量，串联部署在网络通路中。检测方式：①基于签名（Signature-based）——已知攻击特征库②基于异常（Anomaly-based）——建立基线，偏离则告警③基于状态（Stateful）——追踪协议状态。NGFW通常内置IPS功能。",
+      "tags": ["IDS", "IPS", "入侵检测", "签名检测", "异常检测"]
+    },
+    {
+      "id": "D4-009",
+      "subdomain": "网络架构安全设计",
+      "difficulty": 2,
+      "question": "以下哪种协议用于保护路由器之间的路由信息不被伪造？",
+      "options": {
+        "A": "BGP安全扩展（BGPsec）和路由源验证（ROA/RPKI）",
+        "B": "HTTPS",
+        "C": "IPsec",
+        "D": "802.1X"
+      },
+      "correct": "A",
+      "explanation": "BGP（边界网关协议）是互联网核心路由协议，但最初设计没有安全机制。BGP劫持攻击可以将流量重定向。安全加固：①BGPsec——对BGP路径通告进行数字签名②ROA（路由源授权）+RPKI（资源公钥基础设施）——验证IP地址块和AS号的所有权③MD5/TCP-AO认证BGP会话。2010年中国电信BGP事件是著名的BGP劫持案例。",
+      "tags": ["BGP", "BGP劫持", "RPKI", "路由安全"]
+    },
+    {
+      "id": "D4-010",
+      "subdomain": "安全通信渠道",
+      "difficulty": 2,
+      "question": "DKIM、SPF和DMARC在邮件安全中分别解决什么问题？",
+      "options": {
+        "A": "SPF验证发件服务器IP授权；DKIM提供发件域数字签名；DMARC定义认证失败后的处理策略",
+        "B": "三者都只加密邮件内容",
+        "C": "SPF防病毒；DKIM防垃圾邮件；DMARC防钓鱼",
+        "D": "三者功能相同，只需部署其中一个"
+      },
+      "correct": "A",
+      "explanation": "邮件认证三剑客：①SPF（发件人策略框架）——DNS TXT记录定义哪些IP可以代表域名发邮件，验证发件服务器IP②DKIM（域名密钥标识邮件）——发件服务器用私钥对邮件签名，接收方用DNS公钥验证（防篡改）③DMARC（基于域的消息认证、报告和一致性）——指定SPF/DKIM验证失败后的动作（none/quarantine/reject）并接收报告。三者联合防御邮件欺骗（Email Spoofing）和钓鱼攻击。",
+      "tags": ["DKIM", "SPF", "DMARC", "邮件安全", "反钓鱼"]
+    },
+    {
+      "id": "D4-011",
+      "subdomain": "网络组件安全",
+      "difficulty": 3,
+      "question": "DNS劫持（DNS Hijacking）的防御措施是什么？",
+      "options": {
+        "A": "DNSSEC（DNS安全扩展）提供DNS响应的数字签名验证",
+        "B": "使用私有DNS服务器",
+        "C": "禁用DNS缓存",
+        "D": "只使用IP地址访问服务"
+      },
+      "correct": "A",
+      "explanation": "DNS劫持攻击变种：①DNS缓存投毒——在DNS缓存中注入伪造记录（Kaminsky攻击）②DNS劫持——修改用户路由器或hosts文件③BGP劫持影响DNS。防御：①DNSSEC——对DNS记录进行数字签名，验证数据真实性②DoH（DNS over HTTPS）/DoT（DNS over TLS）——加密DNS查询防止监听③0x20编码——随机化查询大小写防缓存投毒④最短TTL（紧急时可快速更新）。",
+      "tags": ["DNS劫持", "DNSSEC", "DNS缓存投毒", "DoH", "DoT"]
+    },
+    {
+      "id": "D4-012",
+      "subdomain": "网络架构安全设计",
+      "difficulty": 2,
+      "question": "NAT（网络地址转换）对安全的影响是什么？",
+      "options": {
+        "A": "NAT隐藏内网真实IP，提供一定安全屏蔽，但不能替代防火墙",
+        "B": "NAT完全消除了安全风险",
+        "C": "NAT降低了网络安全性",
+        "D": "NAT只用于扩展IP地址，没有安全功能"
+      },
+      "correct": "A",
+      "explanation": "NAT（网络地址转换）将私有IP映射为公共IP：安全优点：①隐藏内网拓扑——外部无法直接看到内部IP结构②默认阻断入站连接——无NAT映射的入站连接被丢弃（类似有状态防火墙效果）。局限性：①NAT不是防火墙——无法过滤应用层攻击②NAT穿透技术（STUN/TURN）可绕过③内网被攻陷后NAT保护失效。NAT是IPv4地址耗尽的临时解决方案，IPv6不需要NAT。",
+      "tags": ["NAT", "网络安全", "私有IP", "防火墙对比"]
+    },
+    {
+      "id": "D4-013",
+      "subdomain": "网络组件安全",
+      "difficulty": 2,
+      "question": "802.1X端口访问控制标准中，三个关键角色是什么？",
+      "options": {
+        "A": "请求方（Supplicant）、认证方（Authenticator）、认证服务器（RADIUS）",
+        "B": "客户端、服务器、防火墙",
+        "C": "路由器、交换机、终端",
+        "D": "用户、管理员、访客"
+      },
+      "correct": "A",
+      "explanation": "802.1X是基于端口的网络访问控制（NAC）标准：①请求方（Supplicant）——尝试接入网络的设备，运行802.1X客户端②认证方（Authenticator）——网络设备（交换机/无线AP），控制端口访问③认证服务器（Authentication Server）——通常是RADIUS服务器，验证用户凭证并通知认证方。流程：Supplicant发送EAP请求→Authenticator转发→RADIUS验证→返回Access-Accept/Reject。常用于企业Wi-Fi（WPA2/3-Enterprise）和有线网络准入控制。",
+      "tags": ["802.1X", "RADIUS", "NAC", "EAP", "网络准入"]
+    },
+    {
+      "id": "D4-014",
+      "subdomain": "安全通信渠道",
+      "difficulty": 1,
+      "question": "VPN中，SSL VPN和IPsec VPN相比，主要优势是什么？",
+      "options": {
+        "A": "SSL VPN工作在应用层，只需浏览器无需额外客户端，穿透防火墙能力更强",
+        "B": "SSL VPN提供比IPsec更强的加密",
+        "C": "SSL VPN速度比IPsec快",
+        "D": "SSL VPN不需要认证"
+      },
+      "correct": "A",
+      "explanation": "SSL VPN vs IPsec VPN对比：SSL VPN优势——①无需专用客户端（浏览器即可）②更好的NAT穿透③粒度更细的访问控制（应用级别）。IPsec VPN优势——①支持所有IP流量②性能更好（内核级实现）③更适合点对点或站点到站点VPN。企业远程访问通常首选SSL VPN（客户端无需安装）；站点到站点连接通常用IPsec。Split Tunneling（分隧道）：只有特定流量通过VPN，其余直接上网。",
+      "tags": ["SSL VPN", "IPsec VPN", "远程访问", "VPN对比"]
+    },
+    {
+      "id": "D4-015",
+      "subdomain": "网络架构安全设计",
+      "difficulty": 3,
+      "question": "DoS（拒绝服务）和DDoS（分布式拒绝服务）攻击的主要防御策略是什么？",
+      "options": {
+        "A": "流量清洗（Scrubbing Center）、速率限制、黑洞路由和CDN分散流量",
+        "B": "增加服务器内存",
+        "C": "使用更强的加密",
+        "D": "关闭所有对外服务"
+      },
+      "correct": "A",
+      "explanation": "DDoS防御体系：①上游清洗——ISP或专业抗DDoS服务（CloudFlare/Akamai）在流量进入前过滤②BGP黑洞路由（RTBH）——将攻击目标IP的流量引入黑洞丢弃（牺牲可用性）③速率限制（Rate Limiting）——限制每IP请求频率④CDN——分散流量到多节点⑤Anycast路由——将攻击流量分散到多个PoP⑥SYN Cookie——防御SYN Flood不耗尽连接表。业务连续性角度：预先与上游ISP签订DDoS缓解SLA。",
+      "tags": ["DDoS", "DoS", "流量清洗", "BGP黑洞", "CDN"]
+    },
+    {
+      "id": "D4-016",
+      "subdomain": "网络组件安全",
+      "difficulty": 2,
+      "question": "网络流量分析（NTA）工具（如Zeek/Bro、NetFlow）主要用于什么安全目的？",
+      "options": {
+        "A": "检测异常流量模式、横向移动和数据渗出（Data Exfiltration）",
+        "B": "加密网络流量",
+        "C": "替代防火墙功能",
+        "D": "管理网络带宽分配"
+      },
+      "correct": "A",
+      "explanation": "NTA（网络流量分析）通过分析网络元数据（IP、端口、字节数、连接时长）而非数据包内容来检测威胁：①C2通信——周期性的小量外出连接（Beaconing）②数据渗出——大量数据传出③横向移动——内网中不寻常的内-内通信④DNS隧道——通过DNS查询传输数据。工具：NetFlow/sFlow（流量统计）、Zeek（协议分析）、SIEM集成。即使流量加密也能分析元数据。",
+      "tags": ["NTA", "NetFlow", "数据渗出", "横向移动", "Beaconing"]
+    },
+    {
+      "id": "D4-017",
+      "subdomain": "安全通信渠道",
+      "difficulty": 2,
+      "question": "S/MIME和PGP都用于邮件安全，它们主要提供哪些保护？",
+      "options": {
+        "A": "端到端加密（保密性）和数字签名（完整性+不可否认性）",
+        "B": "只提供垃圾邮件过滤",
+        "C": "只保护邮件传输过程",
+        "D": "只提供发件服务器认证"
+      },
+      "correct": "A",
+      "explanation": "S/MIME和PGP都是端到端邮件加密标准：保密性——用收件人公钥加密邮件，只有收件人私钥能解密；不可否认性——用发件人私钥签名，确认发件人身份。区别：S/MIME使用CA签发的数字证书（PKI体系）；PGP使用信任网（Web of Trust），用户互相签名认证。两者都只加密邮件正文，邮件头（收发件人、主题）通常不加密（传输层TLS加密解决头部问题）。",
+      "tags": ["S/MIME", "PGP", "邮件加密", "端到端加密"]
+    },
+    {
+      "id": "D4-018",
+      "subdomain": "网络组件安全",
+      "difficulty": 2,
+      "question": "下一代防火墙（NGFW）相比传统防火墙的核心增强功能是什么？",
+      "options": {
+        "A": "深度包检测（DPI）、应用识别、用户身份感知和集成IPS",
+        "B": "NGFW处理速度更快",
+        "C": "NGFW支持更多物理端口",
+        "D": "NGFW只能在云环境中使用"
+      },
+      "correct": "A",
+      "explanation": "NGFW（下一代防火墙）核心能力：①深度包检测（DPI）——检查应用层内容，不只看端口②应用感知——识别应用（如Facebook/BitTorrent）而非仅靠端口③用户身份——基于用户名而非IP地址设置策略（集成AD/LDAP）④SSL解密——检查HTTPS加密流量⑤沙盒——检测未知恶意软件⑥集成威胁情报。代表产品：Palo Alto PA系列、Fortinet FortiGate、Check Point。",
+      "tags": ["NGFW", "DPI", "应用感知", "SSL解密"]
+    },
+    {
+      "id": "D4-019",
+      "subdomain": "网络架构安全设计",
+      "difficulty": 3,
+      "question": "软件定义广域网（SD-WAN）相比传统MPLS专线在安全方面的考量是什么？",
+      "options": {
+        "A": "SD-WAN需要额外的加密（如IPsec/TLS）保护通过公网传输的流量；MPLS私有性更强但成本高",
+        "B": "SD-WAN天然比MPLS更安全",
+        "C": "SD-WAN和MPLS安全级别相同",
+        "D": "SD-WAN不需要任何安全加固"
+      },
+      "correct": "A",
+      "explanation": "SD-WAN vs MPLS安全对比：MPLS——运营商提供的私有专线，流量不经过公网，天然隔离（但不加密，运营商可见），成本高。SD-WAN——利用互联网+加密（通常IPsec/TLS隧道）替代MPLS，成本低。SD-WAN安全考量：①必须端到端加密②集中控制器是高价值攻击目标③需要与SASE（安全访问服务边缘）结合，提供云端安全服务（防火墙、SWG、CASB）。",
+      "tags": ["SD-WAN", "MPLS", "SASE", "广域网安全"]
+    },
+    {
+      "id": "D4-020",
+      "subdomain": "网络架构安全设计",
+      "difficulty": 2,
+      "question": "蜜罐（Honeypot）技术在网络安全中的作用是什么？",
+      "options": {
+        "A": "诱骗攻击者，收集攻击情报，分散攻击者注意力，延迟攻击行为",
+        "B": "蜜罐是攻击者使用的工具",
+        "C": "蜜罐用于加密存储敏感数据",
+        "D": "蜜罐是一种备份技术"
+      },
+      "correct": "A",
+      "explanation": "蜜罐（Honeypot）是模拟真实系统的诱骗陷阱：用途①早期预警——发现针对内部IP的攻击行为②收集攻击样本和战术（TTP）③拖慢攻击者，争取响应时间。分类：低交互蜜罐（模拟服务，风险低）vs 高交互蜜罐（完整系统，信息更丰富但风险高）。蜜网（Honeynet）是多个蜜罐的网络。法律考量：蜜罐不得用于'诱捕'，需确保不违反法律（陷阱法律Entrapment）。",
+      "tags": ["蜜罐", "Honeypot", "欺骗防御", "威胁情报"]
+    },
+    {
+      "id": "D4-021",
+      "subdomain": "网络组件安全",
+      "difficulty": 2,
+      "question": "SIEM（安全信息和事件管理）系统的核心功能是什么？",
+      "options": {
+        "A": "集中收集和关联来自多个源的日志，提供实时告警和合规报告",
+        "B": "SIEM仅用于存储日志",
+        "C": "SIEM是一种防火墙类型",
+        "D": "SIEM只监控网络流量"
+      },
+      "correct": "A",
+      "explanation": "SIEM核心能力：①日志聚合——从防火墙/IPS/服务器/应用收集日志②事件关联（Correlation）——单个事件可能无害，多事件关联识别攻击链③实时告警——触发规则时立即通知④合规报告——自动生成PCI DSS/SOX等合规报告⑤威胁情报集成。SIEM vs SOC：SIEM是工具；SOC（安全运营中心）是使用SIEM的人员+流程+技术体系。现代SOAR（安全编排自动化响应）在SIEM基础上增加自动化响应能力。",
+      "tags": ["SIEM", "日志管理", "事件关联", "SOC", "合规"]
+    },
+    {
+      "id": "D4-022",
+      "subdomain": "安全通信渠道",
+      "difficulty": 2,
+      "question": "HTTPS中TLS握手过程使用非对称加密的目的是什么？",
+      "options": {
+        "A": "安全协商对称会话密钥，后续实际数据传输使用更快的对称加密",
+        "B": "用非对称加密直接加密所有传输数据",
+        "C": "TLS握手不使用非对称加密",
+        "D": "只验证服务器证书，不协商密钥"
+      },
+      "correct": "A",
+      "explanation": "TLS握手（混合加密）流程：①客户端发送支持的TLS版本和加密套件②服务器返回证书（含公钥）③客户端验证证书有效性（CA链验证）④密钥协商——使用RSA或ECDHE协商预主密钥（非对称加密，保证安全传输）⑤双方基于预主密钥派生对称会话密钥⑥后续数据用AES等对称加密传输（速度快）。TLS 1.3已强制使用ECDHE（提供前向保密），废除RSA密钥交换。",
+      "tags": ["TLS握手", "混合加密", "前向保密", "ECDHE", "HTTPS"]
+    },
+    {
+      "id": "D4-023",
+      "subdomain": "网络架构安全设计",
+      "difficulty": 2,
+      "question": "微分段（Micro-segmentation）技术在数据中心安全中的主要作用是什么？",
+      "options": {
+        "A": "在工作负载级别实施精细访问控制，阻止攻击者在数据中心内横向移动",
+        "B": "微分段是一种存储技术",
+        "C": "微分段只适用于云环境",
+        "D": "微分段替代了防火墙的所有功能"
+      },
+      "correct": "A",
+      "explanation": "微分段是零信任架构在数据中心的实现：传统模式——东西向流量（服务器间）缺乏控制，一旦攻破一台服务器即可横向移动。微分段——为每个工作负载（VM/容器）配置独立策略，只允许必要的服务间通信。实现方式：SDN、hypervisor防火墙（VMware NSX）、Kubernetes网络策略。防止：勒索软件横向传播、APT横向移动。",
+      "tags": ["微分段", "横向移动", "零信任", "东西向流量", "SDN"]
+    },
+    {
+      "id": "D4-024",
+      "subdomain": "网络组件安全",
+      "difficulty": 3,
+      "question": "SYN Flood攻击利用了TCP三次握手的什么缺陷？",
+      "options": {
+        "A": "服务器在收到SYN后保存半开连接状态，大量伪造SYN耗尽连接表（Backlog Queue）",
+        "B": "SYN包可以携带恶意代码",
+        "C": "SYN包可以绕过防火墙",
+        "D": "TCP握手不需要认证"
+      },
+      "correct": "A",
+      "explanation": "SYN Flood原理：①客户端发送大量伪造源IP的SYN包②服务器分配资源，发送SYN-ACK并等待（半开连接）③由于IP伪造，ACK永远不来，连接超时前占用资源④大量半开连接耗尽Backlog Queue，合法连接被拒。防御：①SYN Cookie——服务器收到SYN后不分配资源，等到ACK后才建立连接②速率限制SYN包③防火墙过滤伪造IP（Ingress Filtering, BCP38）。",
+      "tags": ["SYN Flood", "TCP握手", "DoS", "SYN Cookie"]
+    },
+    {
+      "id": "D4-025",
+      "subdomain": "网络架构安全设计",
+      "difficulty": 2,
+      "question": "代理服务器（Proxy Server）在安全架构中的主要作用是什么？",
+      "options": {
+        "A": "隐藏内部用户真实IP、内容过滤、SSL检查和缓存加速",
+        "B": "代理服务器只用于加速网页访问",
+        "C": "代理服务器替代防火墙",
+        "D": "代理服务器仅用于匿名浏览"
+      },
+      "correct": "A",
+      "explanation": "企业代理服务器安全功能：①正向代理——代理内网用户访问外网，隐藏真实IP②内容过滤——阻断恶意网站、DLP检查外发内容③SSL/TLS检查——解密HTTPS流量检查威胁（需部署自签CA）④URL分类过滤⑤带宽管理。反向代理——代表服务器接收外部请求（如Nginx），隐藏后端真实IP，提供负载均衡和WAF功能。CASB（云访问安全代理）是专门针对SaaS应用的代理。",
+      "tags": ["代理服务器", "正向代理", "反向代理", "SSL检查", "CASB"]
+    },
+    {
+      "id": "D4-026",
+      "subdomain": "网络组件安全",
+      "difficulty": 2,
+      "question": "物联网（IoT）设备的主要安全挑战是什么？",
+      "options": {
+        "A": "资源受限无法运行完整安全软件、默认凭证弱、补丁更新困难、大量设备扩大攻击面",
+        "B": "IoT设备比PC更安全",
+        "C": "IoT设备不需要网络安全控制",
+        "D": "IoT设备安全由互联网提供商负责"
+      },
+      "correct": "A",
+      "explanation": "IoT安全挑战：①弱凭证——大量设备使用默认密码（Mirai僵尸网络的根源）②资源受限——内存/CPU不足以运行完整加密和安全功能③生命周期长——制造商停止更新后漏洞无法修补④大攻击面——数十亿设备⑤物理访问风险⑥通信加密不足。IoT安全最佳实践：网络隔离（单独VLAN）、更改默认密码、禁用不用服务、固件及时更新、资产清单管理。",
+      "tags": ["IoT安全", "Mirai", "默认凭证", "网络分段"]
+    },
+    {
+      "id": "D4-027",
+      "subdomain": "安全通信渠道",
+      "difficulty": 2,
+      "question": "Tor网络（洋葱路由）的安全特性和局限性是什么？",
+      "options": {
+        "A": "通过多层加密和多节点中继提供匿名性，但出口节点可以监听未加密流量，速度慢",
+        "B": "Tor提供完全的匿名性，无法被追踪",
+        "C": "Tor主要用于加密文件存储",
+        "D": "Tor只能用于暗网访问"
+      },
+      "correct": "A",
+      "explanation": "洋葱路由（Tor）工作原理：流量经过三个以上中继节点，每层中继只知道上一个和下一个节点，实现匿名性。局限性：①出口节点——最后一个节点（Exit Node）可见流量内容（如果不是HTTPS）②流量分析——大流量用户可通过时序关联去匿名化③慢速——多跳延迟高④暗网不等于非法——Tor也用于新闻自由/隐私保护。CISSP关注点：合法的匿名通信工具，也被攻击者用于隐藏C2通信。",
+      "tags": ["Tor", "洋葱路由", "匿名性", "出口节点"]
+    },
+    {
+      "id": "D4-028",
+      "subdomain": "网络架构安全设计",
+      "difficulty": 2,
+      "question": "网络访问控制（NAC）解决方案的主要功能是什么？",
+      "options": {
+        "A": "验证设备合规性（补丁/杀毒/配置），不合规设备隔离到修复区",
+        "B": "NAC只控制用户认证，不检查设备",
+        "C": "NAC替代VPN提供远程访问",
+        "D": "NAC只适用于无线网络"
+      },
+      "correct": "A",
+      "explanation": "NAC（网络访问控制）实施前置条件检查（Pre-admission Check）：①端点合规验证——操作系统补丁级别、杀毒软件版本、防火墙状态、加密状态②身份认证——802.1X + RADIUS③准入决策——合规→允许进入对应VLAN，不合规→隔离到修复VLAN，修复后重新评估（Post-admission Monitoring）。实现方式：802.1X、DHCP控制、内联代理。代表产品：Cisco ISE、Forescout、Aruba ClearPass。",
+      "tags": ["NAC", "端点合规", "802.1X", "隔离", "前置检查"]
+    },
+    {
+      "id": "D4-029",
+      "subdomain": "网络组件安全",
+      "difficulty": 3,
+      "question": "BGP路由劫持（BGP Hijacking）和路由泄漏（Route Leak）的区别是什么？",
+      "options": {
+        "A": "BGP劫持是恶意宣告他人IP前缀；路由泄漏是将仅供客户的路由意外宣告给其他ISP",
+        "B": "两者完全相同",
+        "C": "BGP劫持合法；路由泄漏违法",
+        "D": "路由泄漏只发生在内网"
+      },
+      "correct": "A",
+      "explanation": "BGP安全事件：①BGP劫持——恶意AS宣告不属于自己的IP前缀，将目标流量劫持到自己的AS（可用于DDoS、监听或黑洞丢弃）。2010年中国电信劫持15%互联网流量事件②路由泄漏（Route Leak）——通常是配置错误，将本应私有的客户路由泄露给上游ISP，造成流量绕路或拥塞。2019年Cloudflare路由泄漏事件。防御：RPKI/ROA验证路由源合法性。",
+      "tags": ["BGP劫持", "路由泄漏", "RPKI", "互联网安全"]
+    },
+    {
+      "id": "D4-030",
+      "subdomain": "安全通信渠道",
+      "difficulty": 2,
+      "question": "MPLS（多协议标签交换）网络中，Label（标签）机制的安全优势是什么？",
+      "options": {
+        "A": "基于标签转发而非IP地址，逻辑隔离客户流量，不同客户VPN之间不可互见",
+        "B": "MPLS标签提供加密功能",
+        "C": "MPLS不需要任何安全配置",
+        "D": "MPLS标签可以替代数字签名"
+      },
+      "correct": "A",
+      "explanation": "MPLS安全特性：①流量分离——不同客户（VPN）使用不同标签路径，逻辑隔离（但不加密）②内部网络不暴露——客户无法看到运营商骨干网络的IP拓扑③标签欺骗风险——如果攻击者能插入到MPLS网络，可以伪造标签。MPLS本质上是运营商私有专线，依赖物理/逻辑隔离而非加密提供安全性。对于跨MPLS传输的敏感数据，仍建议在MPLS上叠加加密（IPsec）。",
+      "tags": ["MPLS", "标签交换", "VPN", "流量隔离"]
+    }
+  ]
+}
