@@ -57,6 +57,9 @@ python main.py init
 ### 4. 开始学习
 
 ```bash
+# 总菜单模式
+python main.py
+
 # 练习模式（离线）
 python main.py practice --domain 1 --count 5
 
