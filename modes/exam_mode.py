@@ -90,9 +90,9 @@ def run_exam() -> None:
             else:
                 ability = max(-3.0, ability - 0.2)
 
-            # 考试模式不显示解析
+            # 考试模式不显示答题正确性与解析
             console.print(
-                f"  {'✅' if is_correct else '❌'}  已作答  {time_hint}\n"
+                f"  📝  已作答  {time_hint}\n"
             )
             answered += 1
 
