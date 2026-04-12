@@ -14,7 +14,7 @@ from config.domains import DOMAINS
 from config.settings import settings
 from database.models import (
     create_session, finish_session, record_answer,
-    get_questions, get_domain_stats, get_mastered_question_ids,
+    get_questions_balanced, get_domain_stats,
 )
 from analysis.weakness_detector import detect_and_save_weaknesses
 from ui.cli.display import print_question, print_result, get_user_answer, shuffle_question
@@ -77,8 +77,31 @@ def run_daily_diagnostic() -> None:
 # ─── 内部实现 ────────────────────────────────────────────────────
 
 def _run_diagnostic() -> None:
-    allocation = _allocate_questions(settings.DAILY_DIAGNOSTIC_COUNT)
-    questions = _load_questions(allocation)
+    total_count = settings.DAILY_DIAGNOSTIC_COUNT
+
+    # 检查今日是否有未完成的会话（断点续答）
+    resume = _get_today_incomplete_session()
+    if resume:
+        session_id, already_answered, answered_ids = resume
+        remaining = total_count - already_answered
+        console.print(
+            Panel(
+                f"  检测到今日诊断已答 [cyan]{already_answered}[/cyan] 题，"
+                f"还剩 [yellow]{remaining}[/yellow] 题\n"
+                "  继续上次进度...",
+                title="🔄 断点续答",
+                border_style="yellow",
+                box=box.ROUNDED,
+            )
+        )
+    else:
+        already_answered = 0
+        answered_ids = []
+        remaining = total_count
+        session_id = create_session("diagnostic", list(DOMAINS.keys()))
+
+    allocation = _allocate_questions(remaining)
+    questions = _load_questions(allocation, exclude_ids=answered_ids)
 
     if not questions:
         console.print(
@@ -91,13 +114,14 @@ def _run_diagnostic() -> None:
         )
         return
 
-    session_id = create_session("diagnostic", list(DOMAINS.keys()))
     start_time = time.time()
-
     results = _run_answer_loop(questions, session_id)
-
     elapsed = int(time.time() - start_time)
-    finish_session(session_id, results["total"], results["correct"], elapsed)
+
+    total_answered = already_answered + results["total"]
+    # 只有累计答题数达到配置总数才标记为完成
+    if total_answered >= total_count:
+        finish_session(session_id, total_answered, results["correct"], elapsed)
 
     weaknesses = detect_and_save_weaknesses()
     recs = _generate_recommendations(weaknesses)
@@ -111,15 +135,40 @@ def _run_diagnostic() -> None:
 
 
 def _is_today_done() -> bool:
+    """今日诊断已完成：存在 is_completed=1 且答题数达到配置总数的会话"""
     from database.connection import get_connection
     today = date.today().isoformat()
     conn = get_connection()
     cur = conn.execute(
         "SELECT id FROM study_sessions "
-        "WHERE session_type='diagnostic' AND date(started_at)=? AND is_completed=1",
-        (today,),
+        "WHERE session_type='diagnostic' AND date(started_at)=? "
+        "AND is_completed=1 AND total_questions >= ?",
+        (today, settings.DAILY_DIAGNOSTIC_COUNT),
     )
     return cur.fetchone() is not None
+
+
+def _get_today_incomplete_session() -> tuple[int, int, list[int]] | None:
+    """返回今日未完成的诊断会话信息 (session_id, 已答题数, 已答题ID列表)，无则返回 None"""
+    from database.connection import get_connection
+    today = date.today().isoformat()
+    conn = get_connection()
+    cur = conn.execute(
+        "SELECT id FROM study_sessions "
+        "WHERE session_type='diagnostic' AND date(started_at)=? AND is_completed=0 "
+        "ORDER BY started_at DESC LIMIT 1",
+        (today,),
+    )
+    row = cur.fetchone()
+    if not row:
+        return None
+    session_id = row["id"]
+    cur2 = conn.execute(
+        "SELECT question_id FROM answer_records WHERE session_id=?",
+        (session_id,),
+    )
+    answered_ids = [r["question_id"] for r in cur2.fetchall()]
+    return session_id, len(answered_ids), answered_ids
 
 
 def _check_all_passing() -> bool:
@@ -147,14 +196,16 @@ def _allocate_questions(total: int = 30) -> dict[int, int]:
     return alloc
 
 
-def _load_questions(allocation: dict[int, int]) -> list[dict]:
-    mastered = get_mastered_question_ids()
+def _load_questions(allocation: dict[int, int], exclude_ids: list[int] | None = None) -> list[dict]:
+    """按域分配加载题目（80%新题+20%历史错题），本次已答题目强制排除"""
     all_qs: list[dict] = []
     for did, n in allocation.items():
-        qs = get_questions(domain_ids=[did], exclude_ids=mastered or None, limit=n + 5)
-        # 若排除后不足，回退到全量
-        if len(qs) < n:
-            qs = get_questions(domain_ids=[did], limit=n + 5)
+        qs = get_questions_balanced(
+            domain_ids=[did],
+            exclude_ids=exclude_ids or None,
+            limit=n + 5,
+            new_ratio=settings.QUESTION_NEW_RATIO,
+        )
         picked = random.sample(qs, min(n, len(qs))) if qs else []
         all_qs.extend(picked)
     random.shuffle(all_qs)

@@ -10,8 +10,8 @@ from rich.panel import Panel
 from config.settings import settings
 from config.domains import DOMAINS
 from database.models import (
-    get_questions, create_session, finish_session,
-    record_answer, update_daily_progress, get_mastered_question_ids,
+    get_questions, get_questions_balanced,
+    create_session, finish_session, record_answer, update_daily_progress,
 )
 from ui.cli.display import print_question, print_result, get_user_answer, shuffle_question
 from ui.cli.tables import print_session_summary
@@ -139,26 +139,35 @@ def run_exam() -> None:
 
 
 def _load_exam_questions() -> list[dict]:
-    """按权重从各域加载题目，并随机打乱"""
-    mastered = get_mastered_question_ids()
+    """按权重从各域加载题目（80%新题+20%错题），保留难度混合，随机打乱"""
     all_questions = []
     for domain_id, target in DOMAIN_ALLOCATION.items():
-        qs = get_questions(domain_ids=[domain_id], exclude_ids=mastered or None, limit=target + 5)
-        # 排除后不足则回退全量
+        # 用 balanced 策略拉取候选池（多拉供难度筛选使用）
+        qs = get_questions_balanced(
+            domain_ids=[domain_id],
+            limit=target + 20,
+            new_ratio=settings.QUESTION_NEW_RATIO,
+        )
+        # 候选不足时回退全量
         if len(qs) < target:
-            qs = get_questions(domain_ids=[domain_id], limit=target + 5)
+            qs = get_questions(domain_ids=[domain_id], limit=target + 20)
+
         # 按难度混合：40%简单，40%中等，20%难
-        easy = [q for q in qs if q.get("difficulty") == 1]
+        easy   = [q for q in qs if q.get("difficulty") == 1]
         medium = [q for q in qs if q.get("difficulty") == 2]
-        hard = [q for q in qs if q.get("difficulty") == 3]
+        hard   = [q for q in qs if q.get("difficulty") == 3]
+        n_easy   = int(target * 0.4)
+        n_medium = int(target * 0.4)
+        n_hard   = target - n_easy - n_medium
 
         selected = (
-            random.sample(easy, min(int(target * 0.4), len(easy)))
-            + random.sample(medium, min(int(target * 0.4), len(medium)))
-            + random.sample(hard, min(int(target * 0.2), len(hard)))
+            random.sample(easy,   min(n_easy,   len(easy)))
+            + random.sample(medium, min(n_medium, len(medium)))
+            + random.sample(hard,   min(n_hard,   len(hard)))
         )
-        # 如果不足，用剩余题目补充
-        remaining = [q for q in qs if q not in selected]
+        # 数量不足时用剩余题目补够
+        used_ids = {q["id"] for q in selected}
+        remaining = [q for q in qs if q["id"] not in used_ids]
         while len(selected) < target and remaining:
             selected.append(remaining.pop(0))
 

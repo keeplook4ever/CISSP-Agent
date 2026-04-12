@@ -7,8 +7,8 @@ from rich.console import Console
 
 from config.settings import settings
 from database.models import (
-    get_questions, create_session, finish_session,
-    record_answer, update_daily_progress, get_mastered_question_ids,
+    get_questions, get_questions_balanced, count_unattempted_by_domain,
+    create_session, finish_session, record_answer, update_daily_progress,
 )
 from ui.cli.display import print_question, print_result, get_user_answer, shuffle_question
 from ui.cli.tables import print_session_summary
@@ -29,31 +29,31 @@ def run_practice(domain_ids: list[int] = None, difficulty: int = None, count: in
     if count is None:
         count = _select_count()
 
-    # 加载题目（排除已掌握题目，不足时回退全量）
-    mastered = get_mastered_question_ids()
-    questions = get_questions(
+    # 加载题目（80%新题 + 20%历史错题，不足时自动回退全量）
+    questions = get_questions_balanced(
         domain_ids=domain_ids,
         difficulty=difficulty,
-        exclude_ids=mastered or None,
         limit=count,
+        new_ratio=settings.QUESTION_NEW_RATIO,
     )
-    if len(questions) < count:
-        questions = get_questions(
-            domain_ids=domain_ids,
-            difficulty=difficulty,
-            limit=count,
-        )
-        if mastered:
-            console.print("  [dim]已掌握题目不足，本次包含部分已答对题目[/dim]")
 
     if not questions:
         console.print("  [red]题库中暂无符合条件的题目，请先运行 init 导入题库[/red]")
         return
 
-    # 如果题目不足，尝试 AI 生成补充
+    # 某域新题已做完时，联网补充（难度 ≥ 中等）
     if len(questions) < count and settings.is_online():
-        console.print(f"  [dim]题库题目不足，AI 将生成补充题目...[/dim]")
-        _try_generate_extra(domain_ids, difficulty, count - len(questions), questions)
+        for did in (domain_ids or []):
+            if count_unattempted_by_domain(did) == 0:
+                console.print(f"  [dim]域{did}新题已做完，AI 生成补充中...[/dim]")
+                _try_generate_extra([did], difficulty, 10, questions)
+        # 补充后重新取题
+        questions = get_questions_balanced(
+            domain_ids=domain_ids,
+            difficulty=difficulty,
+            limit=count,
+            new_ratio=settings.QUESTION_NEW_RATIO,
+        )
 
     count = len(questions)
     session_id = create_session("practice", domain_ids)
@@ -140,11 +140,16 @@ def _select_count() -> int:
 
 
 def _try_generate_extra(domain_ids, difficulty, needed, existing):
-    """AI 生成补充题目（导入但不加入本次 existing 列表）"""
+    """AI 生成补充题目（导入但不加入本次 existing 列表），难度不低于中等"""
     try:
         from ai.question_generator import generate_questions
         import random
         domain_id = random.choice(domain_ids)
-        generate_questions(domain_id, difficulty=difficulty, count=needed)
+        generate_questions(
+            domain_id,
+            difficulty=difficulty,
+            count=needed,
+            min_difficulty=settings.AI_GEN_MIN_DIFFICULTY,
+        )
     except Exception:
         pass

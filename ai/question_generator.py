@@ -19,13 +19,15 @@ def generate_questions(
     subdomain: str = None,
     difficulty: int = None,
     count: int = 5,
+    min_difficulty: int = 1,
 ) -> list[dict]:
     """调用 Claude 生成题目，成功则存入数据库返回题目列表。
-    若该子域已有题目达到 MIN_QUESTIONS_PER_SUBDOMAIN，则跳过生成。"""
+    若该子域已有题目达到 MIN_QUESTIONS_PER_SUBDOMAIN，则跳过生成。
+    min_difficulty: 生成题目的最低难度（1=易,2=中,3=难），联网补充时建议传2。"""
     domain = DOMAINS.get(domain_id, {})
     domain_name = domain.get("name", f"域{domain_id}")
     sub = subdomain or random.choice(domain.get("subdomains", [domain_name]))
-    diff = difficulty or random.randint(1, 3)
+    diff = difficulty or random.randint(max(min_difficulty, 1), 3)
     diff_map = {1: "基础", 2: "中级", 3: "高级"}
 
     # 检查本地已有题数，计算实际需要生成的数量
@@ -127,7 +129,8 @@ def fill_question_bank(
                 # 最多重试 2 次，应对瞬时网络抖动
                 saved = []
                 for attempt in range(2):
-                    saved = generate_questions(domain_id, sub, count=batch_size)
+                    saved = generate_questions(domain_id, sub, count=batch_size,
+                                               min_difficulty=settings.AI_GEN_MIN_DIFFICULTY)
                     if saved:
                         break
                     if attempt == 0:

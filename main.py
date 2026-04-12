@@ -47,9 +47,14 @@ def init():
     plan = generate_plan(date.today())
     console.print(f"  ✅ 生成50天学习计划（从今天开始）")
 
-    mode = "在线 AI 模式" if settings.is_online() else "离线模式（设置 ANTHROPIC_API_KEY 启用AI）"
-    console.print(f"  ✅ 运行模式：{mode}")
-    console.print("\n  [green]初始化完成！运行 [bold]python main.py[/bold] 开始学习[/green]\n")
+    if settings.is_online():
+        console.print("  ✅ 运行模式：在线 AI 模式")
+        console.print("\n  [green]初始化完成！运行 [bold]python main.py[/bold] 开始学习[/green]\n")
+    else:
+        console.print("  [yellow]⚠  未检测到 ANTHROPIC_API_KEY[/yellow]")
+        console.print("     请在项目根目录创建 [bold].env[/bold] 文件并写入：")
+        console.print("     [cyan]ANTHROPIC_API_KEY=sk-ant-api03-xxxx[/cyan]")
+        console.print("\n  初始化完成，配置 API Key 后运行 [bold]python main.py[/bold] 开始学习\n")
 
 
 @cli.command()
@@ -157,7 +162,134 @@ def plan(compact):
     show_plan(compact=compact)
 
 
+# ─── 定时模式 ────────────────────────────────────────────────────
+
+def _match_scheduled_mode() -> dict | None:
+    """检查当前时间是否命中任何定时模式配置，返回第一个匹配项，否则返回 None"""
+    from datetime import datetime
+    schedules = settings.SCHEDULED_MODES
+    if not schedules:
+        return None
+
+    now = datetime.now()
+    current_weekday = now.isoweekday()   # 1=周一 … 7=周日
+    current_time = now.strftime("%H:%M")
+
+    for rule in schedules:
+        weekdays = rule.get("weekdays", [])
+        if weekdays and current_weekday not in weekdays:
+            continue
+        start = rule.get("start_time", "00:00")
+        end = rule.get("end_time", "23:59")
+        if start <= current_time <= end:
+            return rule
+
+    return None
+
+
+def _run_scheduled_mode_if_needed() -> None:
+    """若当前时间命中定时规则，提示用户并自动进入对应模式"""
+    from rich.panel import Panel
+
+    rule = _match_scheduled_mode()
+    if not rule:
+        return
+
+    mode = rule.get("mode", "")
+    label = rule.get("label") or f"定时模式：{mode}"
+    weekdays_map = {1: "周一", 2: "周二", 3: "周三", 4: "周四",
+                    5: "周五", 6: "周六", 7: "周日"}
+    weekdays = rule.get("weekdays", [])
+    days_str = "每天" if not weekdays else "、".join(weekdays_map.get(d, str(d)) for d in weekdays)
+    time_range = f"{rule.get('start_time', '')}–{rule.get('end_time', '')}"
+
+    mode_name_map = {
+        "exam":     "模拟考试",
+        "practice": "练习模式",
+        "review":   "错题复习",
+        "study":    "学习模式",
+    }
+    mode_name = mode_name_map.get(mode, mode)
+
+    console.print(
+        Panel(
+            f"  当前时间匹配定时规则：[bold cyan]{label}[/bold cyan]\n\n"
+            f"  生效时间：{days_str}  {time_range}\n"
+            f"  即将进入：[bold yellow]{mode_name}[/bold yellow]\n\n"
+            "  [bold cyan][Enter][/bold cyan] 立即进入  "
+            "[dim][s][/dim] 跳过进入主菜单",
+            title="⏰ 定时自动进入",
+            border_style="yellow",
+        )
+    )
+
+    try:
+        raw = console.input("  ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        return
+
+    if raw == "s":
+        return
+
+    if mode == "exam":
+        from modes.exam_mode import run_exam
+        run_exam()
+    elif mode == "practice":
+        from modes.practice_mode import run_practice
+        run_practice()
+    elif mode == "review":
+        from modes.review_mode import run_review
+        run_review()
+    elif mode == "study":
+        from modes.study_mode import run_study
+        run_study()
+    else:
+        console.print(f"  [yellow]未知模式：{mode}，跳过[/yellow]")
+
+
 # ─── 交互式主菜单 ────────────────────────────────────────────────
+
+def _check_api_key() -> bool:
+    """检查 ANTHROPIC_API_KEY 是否已配置，未配置则展示配置引导。
+    返回 True 表示可继续运行，False 表示用户选择退出去配置。"""
+    if settings.is_online():
+        return True
+
+    from rich.panel import Panel
+    console.print(
+        Panel(
+            "  [bold]未检测到 ANTHROPIC_API_KEY[/bold]\n\n"
+            "  API Key 是本系统的必要配置，缺少时以下功能将无法使用：\n"
+            "  · 题目耗尽时自动联网生成新题\n"
+            "  · 错题 AI 深度解析\n"
+            "  · 学习模式 AI 知识点讲解\n"
+            "  · 薄弱点 AI 智能分析\n\n"
+            "  [cyan bold]配置方法（二选一）：[/cyan bold]\n\n"
+            "  方式 1 — 在项目根目录创建 [bold].env[/bold] 文件（推荐）：\n"
+            "    ANTHROPIC_API_KEY=sk-ant-api03-xxxx\n\n"
+            "  方式 2 — 设置系统环境变量：\n"
+            "    [dim]macOS/Linux:[/dim]  export ANTHROPIC_API_KEY=sk-ant-api03-xxxx\n"
+            "    [dim]Windows:[/dim]      set ANTHROPIC_API_KEY=sk-ant-api03-xxxx\n\n"
+            "  获取 API Key：[link=https://console.anthropic.com]console.anthropic.com[/link]",
+            title="[red]🔑  需要配置 API Key[/red]",
+            border_style="red",
+        )
+    )
+
+    try:
+        raw = console.input(
+            "\n  [bold cyan][Enter][/bold cyan] 退出并配置  "
+            "[dim][c][/dim] 忽略警告继续（部分功能不可用）：  "
+        ).strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        return False
+
+    if raw == "c":
+        console.print("  [yellow]⚠  以受限模式运行，题库耗尽后将无法自动补充题目[/yellow]\n")
+        return True
+
+    return False
+
 
 def run_interactive() -> None:
     """交互式主菜单循环"""
@@ -168,9 +300,14 @@ def run_interactive() -> None:
         console.print("请先运行：[cyan]python main.py init[/cyan]")
         sys.exit(1)
 
+    if not _check_api_key():
+        sys.exit(0)
+
     from ui.cli.menus import print_main_banner, print_main_menu, prompt_menu_choice
     from modes.daily_diagnostic import run_daily_diagnostic
     run_daily_diagnostic()
+
+    _run_scheduled_mode_if_needed()
 
     while True:
         try:

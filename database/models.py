@@ -76,6 +76,122 @@ def get_mastered_question_ids() -> list[int]:
     return [row["question_id"] for row in cur.fetchall()]
 
 
+def get_questions_balanced(
+    domain_ids: Optional[list[int]] = None,
+    difficulty: Optional[int] = None,
+    exclude_ids: Optional[list[int]] = None,
+    limit: int = 20,
+    new_ratio: float = 0.8,
+) -> list[dict]:
+    """按 new_ratio/wrong_ratio 出题：
+    - new_ratio 部分：从未做过的题（question_stats 中不存在或 is_attempted=0）
+    - 剩余部分：从上次答错的题（last_result=0）
+    - 不足时自动回退到全量随机
+    """
+    import random as _random
+    conn = get_connection()
+    n_new = max(1, int(limit * new_ratio))
+    n_wrong = limit - n_new
+
+    # 构建基础 WHERE 条件（作用于 questions 表别名 q）
+    base_conds = ["q.is_active = 1"]
+    base_params: list = []
+    if domain_ids:
+        ph = ",".join("?" * len(domain_ids))
+        base_conds.append(f"q.domain_id IN ({ph})")
+        base_params.extend(domain_ids)
+    if difficulty is not None:
+        base_conds.append("q.difficulty = ?")
+        base_params.append(difficulty)
+    if exclude_ids:
+        ph = ",".join("?" * len(exclude_ids))
+        base_conds.append(f"q.id NOT IN ({ph})")
+        base_params.extend(exclude_ids)
+
+    # 拉取新题（未做过：LEFT JOIN 后 qs.question_id IS NULL 或 is_attempted=0）
+    new_qs = _fetch_balanced(
+        conn, base_conds, base_params,
+        extra="(qs.question_id IS NULL OR qs.is_attempted = 0)",
+        use_join=True,
+        limit=n_new + 10,
+    )
+
+    # 拉取错题（上次答错：last_result=0），排除已选新题
+    wrong_qs = _fetch_balanced(
+        conn, base_conds, base_params,
+        extra="qs.last_result = 0",
+        use_join=True,
+        limit=n_wrong + 10,
+        extra_exclude=[q["id"] for q in new_qs],
+    )
+
+    selected = (
+        _random.sample(new_qs, min(n_new, len(new_qs)))
+        + _random.sample(wrong_qs, min(n_wrong, len(wrong_qs)))
+    )
+
+    # 不足时用全量随机补充
+    shortage = limit - len(selected)
+    if shortage > 0:
+        have_ids = [q["id"] for q in selected]
+        fallback = _fetch_balanced(
+            conn, base_conds, base_params,
+            extra=None,
+            use_join=False,
+            limit=shortage + 10,
+            extra_exclude=have_ids,
+        )
+        selected.extend(_random.sample(fallback, min(shortage, len(fallback))))
+
+    _random.shuffle(selected)
+    return selected[:limit]
+
+
+def _fetch_balanced(
+    conn,
+    base_conds: list,
+    base_params: list,
+    extra: Optional[str],
+    use_join: bool,
+    limit: int,
+    extra_exclude: Optional[list[int]] = None,
+) -> list[dict]:
+    """内部辅助：按条件从题库拉取题目"""
+    conds = list(base_conds)
+    params = list(base_params)
+    if extra_exclude:
+        ph = ",".join("?" * len(extra_exclude))
+        conds.append(f"q.id NOT IN ({ph})")
+        params.extend(extra_exclude)
+    if extra:
+        conds.append(extra)
+    where = " AND ".join(conds)
+    if use_join:
+        sql = (
+            "SELECT q.* FROM questions q "
+            "LEFT JOIN question_stats qs ON q.id = qs.question_id "
+            f"WHERE {where} ORDER BY RANDOM() LIMIT ?"
+        )
+    else:
+        sql = f"SELECT q.* FROM questions q WHERE {where} ORDER BY RANDOM() LIMIT ?"
+    cur = conn.execute(sql, params + [limit])
+    return [dict(row) for row in cur.fetchall()]
+
+
+def count_unattempted_by_domain(domain_id: int) -> int:
+    """返回某域未做过的题目数量（用于判断是否需要联网补充）"""
+    conn = get_connection()
+    cur = conn.execute(
+        """SELECT COUNT(*) as cnt FROM questions q
+           LEFT JOIN question_stats qs ON q.id = qs.question_id
+           WHERE q.domain_id = ? AND q.is_active = 1
+             AND (qs.question_id IS NULL OR qs.is_attempted = 0)""",
+        (domain_id,),
+    )
+    row = cur.fetchone()
+    return row["cnt"] if row else 0
+
+
 def count_questions_by_domain() -> dict[int, int]:
     conn = get_connection()
     cur = conn.execute(
@@ -138,7 +254,29 @@ def record_answer(
     )
     # 更新域统计
     _update_domain_stats(conn, domain_id, is_correct, time_spent)
+    # 更新题目状态追踪
+    _upsert_question_stats(conn, question_id, is_correct)
     conn.commit()
+
+
+def _upsert_question_stats(conn: sqlite3.Connection, question_id: int, is_correct: bool) -> None:
+    """每次答题后同步更新题目状态（is_attempted、last_result、last_answered_at 等）"""
+    wrong_delta = 0 if is_correct else 1
+    conn.execute(
+        """INSERT INTO question_stats
+               (question_id, is_attempted, last_result, last_answered_at,
+                attempt_count, correct_count, wrong_count)
+           VALUES (?, 1, ?, CURRENT_TIMESTAMP, 1, ?, ?)
+           ON CONFLICT(question_id) DO UPDATE SET
+               is_attempted     = 1,
+               last_result      = excluded.last_result,
+               last_answered_at = CURRENT_TIMESTAMP,
+               attempt_count    = attempt_count + 1,
+               correct_count    = correct_count + excluded.correct_count,
+               wrong_count      = wrong_count + excluded.wrong_count,
+               updated_at       = CURRENT_TIMESTAMP""",
+        (question_id, int(is_correct), int(is_correct), wrong_delta),
+    )
 
 
 def _update_domain_stats(conn: sqlite3.Connection, domain_id: int, is_correct: bool, time_spent: int) -> None:

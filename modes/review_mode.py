@@ -72,8 +72,9 @@ def _review_weak_domains(weaknesses: list[dict]) -> None:
 
     weak_domain_ids = list({w["domain_id"] for w in weaknesses})
 
-    from database.models import get_questions
-    questions = get_questions(domain_ids=weak_domain_ids, limit=20)
+    from database.models import get_questions_balanced
+    questions = get_questions_balanced(domain_ids=weak_domain_ids, limit=20,
+                                       new_ratio=settings.QUESTION_NEW_RATIO)
     if not questions:
         console.print("  [yellow]薄弱域暂无题目[/yellow]")
         return
