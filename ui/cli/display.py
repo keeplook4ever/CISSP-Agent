@@ -1,6 +1,8 @@
 """题目展示和交互组件"""
 from __future__ import annotations
 
+import random
+
 from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
@@ -78,6 +80,34 @@ def get_user_answer(timeout_hint: str = "") -> str:
         if ans in OPTION_LABELS:
             return ans
         console.print("  [red]请输入 A、B、C 或 D[/red]")
+
+
+def shuffle_question(q: dict) -> dict:
+    """随机打乱题目选项顺序，返回新的题目字典（含更新后的 correct 字段）。
+    不修改原始 dict，避免影响数据库记录。"""
+    opts = _get_options(q)
+    original_correct = q.get("correct", "A")
+    correct_text = opts.get(original_correct, "")
+
+    labels = list(OPTION_LABELS)
+    random.shuffle(labels)
+
+    new_opts = {new_label: opts[old_label] for new_label, old_label in zip(OPTION_LABELS, labels)}
+    # 找出正确答案文本对应的新标签
+    new_correct = next(
+        new_label
+        for new_label, old_label in zip(OPTION_LABELS, labels)
+        if opts[old_label] == correct_text
+    )
+
+    shuffled = dict(q)
+    shuffled["options"] = new_opts
+    shuffled["option_a"] = new_opts["A"]
+    shuffled["option_b"] = new_opts["B"]
+    shuffled["option_c"] = new_opts["C"]
+    shuffled["option_d"] = new_opts["D"]
+    shuffled["correct"] = new_correct
+    return shuffled
 
 
 def _get_options(q: dict) -> dict:

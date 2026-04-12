@@ -8,9 +8,9 @@ from rich.console import Console
 from config.settings import settings
 from database.models import (
     get_questions, create_session, finish_session,
-    record_answer, update_daily_progress,
+    record_answer, update_daily_progress, get_mastered_question_ids,
 )
-from ui.cli.display import print_question, print_result, get_user_answer
+from ui.cli.display import print_question, print_result, get_user_answer, shuffle_question
 from ui.cli.tables import print_session_summary
 from ui.cli.menus import select_domain, select_difficulty, confirm
 from analysis.weakness_detector import detect_and_save_weaknesses
@@ -29,12 +29,22 @@ def run_practice(domain_ids: list[int] = None, difficulty: int = None, count: in
     if count is None:
         count = _select_count()
 
-    # 加载题目
+    # 加载题目（排除已掌握题目，不足时回退全量）
+    mastered = get_mastered_question_ids()
     questions = get_questions(
         domain_ids=domain_ids,
         difficulty=difficulty,
+        exclude_ids=mastered or None,
         limit=count,
     )
+    if len(questions) < count:
+        questions = get_questions(
+            domain_ids=domain_ids,
+            difficulty=difficulty,
+            limit=count,
+        )
+        if mastered:
+            console.print("  [dim]已掌握题目不足，本次包含部分已答对题目[/dim]")
 
     if not questions:
         console.print("  [red]题库中暂无符合条件的题目，请先运行 init 导入题库[/red]")
@@ -55,6 +65,7 @@ def run_practice(domain_ids: list[int] = None, difficulty: int = None, count: in
 
     try:
         for i, q in enumerate(questions, 1):
+            q = shuffle_question(q)
             q_start = time.time()
             print_question(q, i, count)
             user_ans = get_user_answer()
@@ -66,7 +77,7 @@ def run_practice(domain_ids: list[int] = None, difficulty: int = None, count: in
             if is_correct:
                 correct_count += 1
 
-            print_result(q, user_ans, is_correct, show_explanation=True)
+            print_result(q, user_ans, is_correct, show_explanation=not is_correct)
             answered += 1
 
             # AI 深度解析（可选）

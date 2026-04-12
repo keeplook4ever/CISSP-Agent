@@ -101,7 +101,7 @@ def _run_review_session(questions: list[dict], session_label: str) -> None:
             if is_correct:
                 correct_count += 1
 
-            print_result(q, user_ans, is_correct, show_explanation=True)
+            print_result(q, user_ans, is_correct, show_explanation=not is_correct)
             answered += 1
 
             record_answer(

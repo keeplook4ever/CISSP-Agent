@@ -14,10 +14,10 @@ from config.domains import DOMAINS
 from config.settings import settings
 from database.models import (
     create_session, finish_session, record_answer,
-    get_questions, get_domain_stats,
+    get_questions, get_domain_stats, get_mastered_question_ids,
 )
 from analysis.weakness_detector import detect_and_save_weaknesses
-from ui.cli.display import print_question, print_result, get_user_answer
+from ui.cli.display import print_question, print_result, get_user_answer, shuffle_question
 from ui.cli.tables import print_weakness_table
 
 console = Console()
@@ -148,9 +148,13 @@ def _allocate_questions(total: int = 30) -> dict[int, int]:
 
 
 def _load_questions(allocation: dict[int, int]) -> list[dict]:
+    mastered = get_mastered_question_ids()
     all_qs: list[dict] = []
     for did, n in allocation.items():
-        qs = get_questions(domain_ids=[did], limit=n + 5)
+        qs = get_questions(domain_ids=[did], exclude_ids=mastered or None, limit=n + 5)
+        # 若排除后不足，回退到全量
+        if len(qs) < n:
+            qs = get_questions(domain_ids=[did], limit=n + 5)
         picked = random.sample(qs, min(n, len(qs))) if qs else []
         all_qs.extend(picked)
     random.shuffle(all_qs)
@@ -163,6 +167,7 @@ def _run_answer_loop(questions: list[dict], session_id: int) -> dict:
     per_domain: dict[int, dict] = {}
 
     for idx, q in enumerate(questions, 1):
+        q = shuffle_question(q)
         print_question(q, idx, total)
         q_start = time.time()
         try:

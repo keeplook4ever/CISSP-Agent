@@ -42,7 +42,7 @@ class Settings:
     DAILY_HOURS: float = 3.0
 
     # 薄弱点阈值（正确率低于此值则标记为薄弱）
-    WEAKNESS_THRESHOLD: float = 0.70
+    WEAKNESS_THRESHOLD: float = 0.80
 
     # 知识点缓存：内容字符数低于此值视为不完整，触发在线补充
     MIN_CONTENT_CHARS: int = 500
@@ -51,10 +51,10 @@ class Settings:
     MIN_QUESTIONS_PER_SUBDOMAIN: int = 30
 
     # 每日诊断：题目总数
-    DAILY_DIAGNOSTIC_COUNT: int = 30
+    DAILY_DIAGNOSTIC_COUNT: int = 50
 
     # 每日诊断：各域达标所需最少答题次数（不足则不纳入"全部达标"判断）
-    DOMAIN_PASS_MIN_ATTEMPTS: int = 100
+    DOMAIN_PASS_MIN_ATTEMPTS: int = 350
 
 
 settings = Settings()

@@ -11,9 +11,9 @@ from config.settings import settings
 from config.domains import DOMAINS
 from database.models import (
     get_questions, create_session, finish_session,
-    record_answer, update_daily_progress,
+    record_answer, update_daily_progress, get_mastered_question_ids,
 )
-from ui.cli.display import print_question, print_result, get_user_answer
+from ui.cli.display import print_question, print_result, get_user_answer, shuffle_question
 from ui.cli.tables import print_session_summary
 
 console = Console()
@@ -76,6 +76,7 @@ def run_exam() -> None:
             time_hint = f"⏱ 剩余 {mins_left}:{secs_left:02d}"
 
             q_start = time.time()
+            q = shuffle_question(q)
             print_question(q, i, total, show_domain=False)
             user_ans = get_user_answer(timeout_hint=f"[dim]{time_hint}[/dim]")
             time_spent = int(time.time() - q_start)
@@ -139,9 +140,13 @@ def run_exam() -> None:
 
 def _load_exam_questions() -> list[dict]:
     """按权重从各域加载题目，并随机打乱"""
+    mastered = get_mastered_question_ids()
     all_questions = []
     for domain_id, target in DOMAIN_ALLOCATION.items():
-        qs = get_questions(domain_ids=[domain_id], limit=target + 5)
+        qs = get_questions(domain_ids=[domain_id], exclude_ids=mastered or None, limit=target + 5)
+        # 排除后不足则回退全量
+        if len(qs) < target:
+            qs = get_questions(domain_ids=[domain_id], limit=target + 5)
         # 按难度混合：40%简单，40%中等，20%难
         easy = [q for q in qs if q.get("difficulty") == 1]
         medium = [q for q in qs if q.get("difficulty") == 2]

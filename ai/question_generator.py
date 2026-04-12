@@ -4,12 +4,14 @@ from __future__ import annotations
 import json
 import random
 import time
+import uuid
+from typing import Optional
 
-from ai.client import chat
+from ai.client import chat, FAST_MODEL
 from ai.prompts import QUESTION_GENERATION
 from config.domains import DOMAINS
 from config.settings import settings
-from database.models import insert_question, count_questions_by_subdomain
+from database.models import insert_question, count_questions_by_subdomain, count_questions_by_domain
 
 
 def generate_questions(
@@ -39,30 +41,105 @@ def generate_questions(
         f"题目ID格式：AI-D{domain_id}-{{三位数字}}。"
     )
 
-    raw = chat(QUESTION_GENERATION, user_msg, max_tokens=4096)
+    try:
+        # fill-bank 批量生成用 Haiku（速度快 5-10 倍）
+        # max_tokens 按题数估算：每题约 800 token（含解析），留 20% 余量
+        estimated_tokens = max(1500, actual_count * 900)
+        raw = chat(QUESTION_GENERATION, user_msg, max_tokens=estimated_tokens, model=FAST_MODEL)
+    except Exception:
+        return []
+
     if not raw:
         return []
 
     try:
         # 提取JSON（Claude有时会包裹在```json```中）
-        if "```" in raw:
-            raw = raw.split("```")[1]
-            if raw.startswith("json"):
-                raw = raw[4:]
-        data = json.loads(raw.strip())
+        text = raw
+        if "```" in text:
+            text = text.split("```")[1]
+            if text.startswith("json"):
+                text = text[4:]
+        data = json.loads(text.strip())
         questions = data.get("questions", [])
-    except (json.JSONDecodeError, IndexError):
+    except (json.JSONDecodeError, IndexError, ValueError):
         return []
 
     saved = []
     for q in questions:
         q["domain_id"] = domain_id
         q["source"] = "claude"
-        if not q.get("id"):
-            q["id"] = f"AI-D{domain_id}-{int(time.time()) % 10000:04d}"
+        # 始终用 UUID 生成唯一 ID，避免 AI 返回重复 ID 导致 INSERT OR IGNORE 跳过
+        q["id"] = f"AI-D{domain_id}-{uuid.uuid4().hex[:8]}"
         try:
-            insert_question(q)
-            saved.append(q)
+            row_id = insert_question(q)
+            if row_id:  # INSERT OR IGNORE 跳过时 lastrowid=0，不计入 saved
+                saved.append(q)
         except Exception:
             pass
     return saved
+
+
+def fill_question_bank(
+    domain_ids: Optional[list[int]] = None,
+    target_per_domain: int = 30,
+    batch_size: int = 3,
+    on_progress=None,
+) -> dict[int, int]:
+    """为指定域批量生成题目，直至每域达到 target_per_domain 道题。
+
+    Args:
+        domain_ids: 要补充的域列表，默认为 [5, 6, 7, 8]
+        target_per_domain: 每域目标题数
+        batch_size: 每次 API 调用生成的题数
+        on_progress: 可选回调 fn(domain_id, subdomain, generated_count)
+
+    Returns:
+        {domain_id: 新增题数} 的字典
+    """
+    target_domain_ids = domain_ids or [5, 6, 7, 8]
+    results: dict[int, int] = {}
+
+    for domain_id in target_domain_ids:
+        domain = DOMAINS.get(domain_id, {})
+        subdomains = domain.get("subdomains", [])
+        if not subdomains:
+            results[domain_id] = 0
+            continue
+
+        domain_generated = 0
+        # 每个子域的目标：均匀分配，至少 3 题
+        target_per_sub = max(3, (target_per_domain + len(subdomains) - 1) // len(subdomains))
+
+        for sub in subdomains:
+            # 先检查域总量是否已达标
+            if count_questions_by_domain().get(domain_id, 0) >= target_per_domain:
+                break
+
+            # 对同一子域最多循环生成 10 批，防止无限消耗
+            for _ in range(10):
+                if count_questions_by_domain().get(domain_id, 0) >= target_per_domain:
+                    break
+                if count_questions_by_subdomain(domain_id, sub) >= target_per_sub:
+                    break
+                # 调用前通知（n=None 表示"正在请求 API，请稍候"）
+                if on_progress:
+                    on_progress(domain_id, sub, None)
+                # 最多重试 2 次，应对瞬时网络抖动
+                saved = []
+                for attempt in range(2):
+                    saved = generate_questions(domain_id, sub, count=batch_size)
+                    if saved:
+                        break
+                    if attempt == 0:
+                        time.sleep(3)
+                n = len(saved)
+                domain_generated += n
+                # 调用后通知实际结果
+                if on_progress:
+                    on_progress(domain_id, sub, n)
+                if n == 0:
+                    break  # 两次均无返回则跳过此子域
+
+        results[domain_id] = domain_generated
+
+    return results

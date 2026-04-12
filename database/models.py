@@ -67,6 +67,15 @@ def get_question_by_id(question_id: int) -> Optional[dict]:
     return dict(row) if row else None
 
 
+def get_mastered_question_ids() -> list[int]:
+    """返回至少答对过一次的题目 ID 列表（用于过滤已掌握题目）"""
+    conn = get_connection()
+    cur = conn.execute(
+        "SELECT DISTINCT question_id FROM answer_records WHERE is_correct = 1"
+    )
+    return [row["question_id"] for row in cur.fetchall()]
+
+
 def count_questions_by_domain() -> dict[int, int]:
     conn = get_connection()
     cur = conn.execute(

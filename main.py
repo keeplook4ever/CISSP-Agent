@@ -88,6 +88,58 @@ def review():
     run_review()
 
 
+@cli.command("fill-bank")
+@click.option("--domain", "-d", multiple=True, type=int, help="指定域ID（可多次，默认5-8）")
+@click.option("--target", "-t", default=30, show_default=True, type=int, help="每域目标题数")
+@click.option("--batch", "-b", default=3, show_default=True, type=int, help="每次生成题数")
+def fill_bank(domain, target, batch):
+    """为题库不足的域批量 AI 生成题目（需要 ANTHROPIC_API_KEY）"""
+    bootstrap()
+    if not settings.is_online():
+        console.print("  [red]此功能需要 ANTHROPIC_API_KEY，请先设置环境变量后重试[/red]")
+        return
+
+    from ai.question_generator import fill_question_bank
+    from database.models import count_questions_by_domain
+    from config.domains import DOMAINS
+
+    domain_ids = list(domain) or [5, 6, 7, 8]
+    before = count_questions_by_domain()
+
+    console.print(f"\n  [bold]开始补充题库：域 {domain_ids}，目标每域 {target} 题[/bold]")
+    console.print("  [dim]每次 API 调用生成 {} 题，请耐心等待...[/dim]\n".format(batch))
+
+    def on_progress(did, sub, n):
+        if n is None:
+            # API 调用前：提示用户正在等待（覆盖式输出，不换行）
+            console.print(f"  域{did} · {sub} → [dim]请求 API 中...[/dim]", end="\r")
+        else:
+            # API 调用后：打印实际结果
+            total = count_questions_by_domain().get(did, 0)
+            status = f"[green]+{n}[/green]" if n > 0 else "[yellow]跳过（已满或无响应）[/yellow]"
+            console.print(f"  域{did} · {sub} → {status} 题  （域合计 {total}）      ")
+
+    results = fill_question_bank(
+        domain_ids=domain_ids,
+        target_per_domain=target,
+        batch_size=batch,
+        on_progress=on_progress,
+    )
+
+    after = count_questions_by_domain()
+    total_new = sum(results.values())
+
+    console.print(f"\n  [bold green]✅ 完成！共新增 {total_new} 道题[/bold green]\n")
+    for did in domain_ids:
+        d = DOMAINS.get(did, {})
+        b = before.get(did, 0)
+        a = after.get(did, 0)
+        console.print(
+            f"  域{did} [{d.get('name','')}]：{b} → [cyan]{a}[/cyan] 题（+{a - b}）"
+        )
+    console.print()
+
+
 @cli.command()
 def report():
     """查看学习报告"""
