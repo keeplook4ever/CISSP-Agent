@@ -15,6 +15,7 @@ from config.settings import settings
 from database.models import (
     create_session, finish_session, record_answer,
     get_questions_balanced, get_domain_stats,
+    get_wrong_questions, get_ai_unattempted_questions,
 )
 from analysis.weakness_detector import detect_and_save_weaknesses
 from ui.cli.display import print_question, print_result, get_user_answer, shuffle_question
@@ -81,7 +82,7 @@ def _run_diagnostic() -> None:
 
     # 检查今日是否有未完成的会话（断点续答）
     resume = _get_today_incomplete_session()
-    if resume:
+    if resume and resume[1] > 0:
         session_id, already_answered, answered_ids = resume
         remaining = total_count - already_answered
         console.print(
@@ -98,8 +99,13 @@ def _run_diagnostic() -> None:
         already_answered = 0
         answered_ids = []
         remaining = total_count
-        session_id = create_session("diagnostic", list(DOMAINS.keys()))
+        # 复用已有空会话或新建
+        if resume:
+            session_id = resume[0]
+        else:
+            session_id = create_session("diagnostic", list(DOMAINS.keys()))
 
+    console.print("  [dim]正在加载题目...[/dim]")
     allocation = _allocate_questions(remaining)
     questions = _load_questions(allocation, exclude_ids=answered_ids)
 
@@ -197,16 +203,49 @@ def _allocate_questions(total: int = 30) -> dict[int, int]:
 
 
 def _load_questions(allocation: dict[int, int], exclude_ids: list[int] | None = None) -> list[dict]:
-    """按域分配加载题目（80%新题+20%历史错题），本次已答题目强制排除"""
+    """按域分配加载题目（历史错题优先，不足时补充AI新题），本次已答题目强制排除"""
     all_qs: list[dict] = []
     for did, n in allocation.items():
-        qs = get_questions_balanced(
-            domain_ids=[did],
-            exclude_ids=exclude_ids or None,
-            limit=n + 5,
-            new_ratio=settings.QUESTION_NEW_RATIO,
-        )
-        picked = random.sample(qs, min(n, len(qs))) if qs else []
+        excl = list(exclude_ids or [])
+        # 1. 历史错题（last_result=0）
+        wrong = get_wrong_questions(domain_ids=[did], exclude_ids=excl or None, limit=n + 5)
+        picked: list[dict] = random.sample(wrong, min(n, len(wrong))) if wrong else []
+        excl += [q["id"] for q in picked]
+
+        # 2. 不足时取 AI 已生成但未做过的题
+        shortage = n - len(picked)
+        if shortage > 0:
+            ai_qs = get_ai_unattempted_questions(domain_ids=[did], exclude_ids=excl or None, limit=shortage + 5)
+            extra = random.sample(ai_qs, min(shortage, len(ai_qs))) if ai_qs else []
+            picked.extend(extra)
+            excl += [q["id"] for q in extra]
+
+        # 3. 先走本地兜底（避免不必要的 AI API 调用）
+        shortage = n - len(picked)
+        if shortage > 0:
+            fallback = get_questions_balanced(
+                domain_ids=[did],
+                exclude_ids=excl or None,
+                limit=shortage + 5,
+                new_ratio=1.0,
+            )
+            extra3 = random.sample(fallback, min(shortage, len(fallback))) if fallback else []
+            picked.extend(extra3)
+            excl += [q["id"] for q in extra3]
+
+        # 4. 本地仍不足时，才调用 AI 生成新题
+        shortage = n - len(picked)
+        if shortage > 0 and settings.is_online():
+            try:
+                from ai.question_generator import generate_questions
+                console.print(f"  [dim]域{did} 题目不足，AI 生成中...[/dim]")
+                generate_questions(did, count=shortage + 3, min_difficulty=settings.AI_GEN_MIN_DIFFICULTY)
+            except Exception:
+                pass
+            ai_qs2 = get_ai_unattempted_questions(domain_ids=[did], exclude_ids=excl or None, limit=shortage + 5)
+            extra2 = random.sample(ai_qs2, min(shortage, len(ai_qs2))) if ai_qs2 else []
+            picked.extend(extra2)
+
         all_qs.extend(picked)
     random.shuffle(all_qs)
     return all_qs
@@ -215,6 +254,7 @@ def _load_questions(allocation: dict[int, int], exclude_ids: list[int] | None = 
 def _run_answer_loop(questions: list[dict], session_id: int) -> dict:
     total = len(questions)
     correct_count = 0
+    answered_count = 0
     per_domain: dict[int, dict] = {}
 
     for idx, q in enumerate(questions, 1):
@@ -233,7 +273,7 @@ def _run_answer_loop(questions: list[dict], session_id: int) -> dict:
         if is_correct:
             correct_count += 1
 
-        print_result(q, answer, is_correct, show_explanation=False)
+        print_result(q, answer, is_correct)
 
         did = q.get("domain_id", 0)
         if did not in per_domain:
@@ -252,8 +292,9 @@ def _run_answer_loop(questions: list[dict], session_id: int) -> dict:
             is_correct=is_correct,
             time_spent=elapsed,
         )
+        answered_count += 1
 
-    return {"total": total, "correct": correct_count, "per_domain": per_domain}
+    return {"total": answered_count, "correct": correct_count, "per_domain": per_domain}
 
 
 def _generate_recommendations(weaknesses: list[dict]) -> list[dict]:

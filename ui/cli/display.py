@@ -59,9 +59,10 @@ def print_result(
         console.print(f"     [green]{correct}. {opts.get(correct, '')}[/green]")
 
     if show_explanation and q.get("explanation"):
+        explanation = _remap_explanation(q["explanation"], q.get("_label_map"))
         console.print(
             Panel(
-                q["explanation"],
+                explanation,
                 title="💡 解析",
                 border_style="yellow",
                 padding=(0, 1),
@@ -92,13 +93,11 @@ def shuffle_question(q: dict) -> dict:
     labels = list(OPTION_LABELS)
     random.shuffle(labels)
 
+    # labels[i] 是 old_label，OPTION_LABELS[i] 是 new_label
+    old_to_new = {old: new for new, old in zip(OPTION_LABELS, labels)}
+
     new_opts = {new_label: opts[old_label] for new_label, old_label in zip(OPTION_LABELS, labels)}
-    # 找出正确答案文本对应的新标签
-    new_correct = next(
-        new_label
-        for new_label, old_label in zip(OPTION_LABELS, labels)
-        if opts[old_label] == correct_text
-    )
+    new_correct = old_to_new[original_correct]
 
     shuffled = dict(q)
     shuffled["options"] = new_opts
@@ -107,6 +106,8 @@ def shuffle_question(q: dict) -> dict:
     shuffled["option_c"] = new_opts["C"]
     shuffled["option_d"] = new_opts["D"]
     shuffled["correct"] = new_correct
+    # 保存映射供解析文字替换使用
+    shuffled["_label_map"] = old_to_new
     return shuffled
 
 
@@ -120,3 +121,18 @@ def _get_options(q: dict) -> dict:
         "C": q.get("option_c", ""),
         "D": q.get("option_d", ""),
     }
+
+
+def _remap_explanation(explanation: str, label_map: dict | None) -> str:
+    """将解析文字中的旧选项字母（A项/B项/C项/D项）替换为打乱后的新字母。"""
+    if not label_map:
+        return explanation
+    import re
+    # 用占位符避免二次替换：先把所有字母替换成占位符，再统一换成新字母
+    placeholder = {old: f"\x00{new}\x00" for old, new in label_map.items()}
+    result = re.sub(
+        r'\b([ABCD])(?=项)',
+        lambda m: placeholder.get(m.group(1), m.group(1)),
+        explanation,
+    )
+    return result.replace("\x00", "")

@@ -7,14 +7,14 @@ from rich.console import Console
 
 from config.settings import settings
 from database.models import (
-    get_questions, get_questions_balanced, count_unattempted_by_domain,
+    get_questions_balanced,
     create_session, finish_session, record_answer, update_daily_progress,
+    get_wrong_questions, get_ai_unattempted_questions,
 )
 from ui.cli.display import print_question, print_result, get_user_answer, shuffle_question
 from ui.cli.tables import print_session_summary
-from ui.cli.menus import select_domain, select_difficulty, confirm
+from ui.cli.menus import select_domain, select_difficulty
 from analysis.weakness_detector import detect_and_save_weaknesses
-from ai.answer_analyzer import explain_answer
 
 console = Console()
 
@@ -29,31 +29,8 @@ def run_practice(domain_ids: list[int] = None, difficulty: int = None, count: in
     if count is None:
         count = _select_count()
 
-    # 加载题目（80%新题 + 20%历史错题，不足时自动回退全量）
-    questions = get_questions_balanced(
-        domain_ids=domain_ids,
-        difficulty=difficulty,
-        limit=count,
-        new_ratio=settings.QUESTION_NEW_RATIO,
-    )
-
-    if not questions:
-        console.print("  [red]题库中暂无符合条件的题目，请先运行 init 导入题库[/red]")
-        return
-
-    # 某域新题已做完时，联网补充（难度 ≥ 中等）
-    if len(questions) < count and settings.is_online():
-        for did in (domain_ids or []):
-            if count_unattempted_by_domain(did) == 0:
-                console.print(f"  [dim]域{did}新题已做完，AI 生成补充中...[/dim]")
-                _try_generate_extra([did], difficulty, 10, questions)
-        # 补充后重新取题
-        questions = get_questions_balanced(
-            domain_ids=domain_ids,
-            difficulty=difficulty,
-            limit=count,
-            new_ratio=settings.QUESTION_NEW_RATIO,
-        )
+    # 加载题目：历史错题优先，不足时补充 AI 新题
+    questions = _load_practice_questions(domain_ids, difficulty, count)
 
     count = len(questions)
     session_id = create_session("practice", domain_ids)
@@ -77,15 +54,8 @@ def run_practice(domain_ids: list[int] = None, difficulty: int = None, count: in
             if is_correct:
                 correct_count += 1
 
-            print_result(q, user_ans, is_correct, show_explanation=not is_correct)
+            print_result(q, user_ans, is_correct)
             answered += 1
-
-            # AI 深度解析（可选）
-            if not is_correct and settings.is_online():
-                if confirm("是否获取 AI 深度解析？"):
-                    console.print("\n  [dim]AI 解析中...[/dim]")
-                    explain_answer(q, user_ans, on_chunk=lambda t: console.print(t, end=""))
-                    console.print()
 
             # 记录答题
             record_answer(
@@ -139,17 +109,63 @@ def _select_count() -> int:
         return settings.DEFAULT_PRACTICE_COUNT
 
 
-def _try_generate_extra(domain_ids, difficulty, needed, existing):
-    """AI 生成补充题目（导入但不加入本次 existing 列表），难度不低于中等"""
-    try:
-        from ai.question_generator import generate_questions
-        import random
-        domain_id = random.choice(domain_ids)
-        generate_questions(
-            domain_id,
-            difficulty=difficulty,
-            count=needed,
-            min_difficulty=settings.AI_GEN_MIN_DIFFICULTY,
+def _load_practice_questions(
+    domain_ids: list[int] | None,
+    difficulty: int | None,
+    count: int,
+) -> list[dict]:
+    """练习题目加载：历史错题优先，不足时补充 AI 新题，最后兜底本地未做题"""
+    import random as _random
+    excl: list[int] = []
+
+    # 1. 历史错题
+    wrong = get_wrong_questions(domain_ids=domain_ids, difficulty=difficulty, limit=count + 10)
+    picked: list[dict] = _random.sample(wrong, min(count, len(wrong))) if wrong else []
+    excl += [q["id"] for q in picked]
+
+    # 2. 不足时取 AI 已生成但未做过的题
+    shortage = count - len(picked)
+    if shortage > 0:
+        ai_qs = get_ai_unattempted_questions(
+            domain_ids=domain_ids, difficulty=difficulty,
+            exclude_ids=excl or None, limit=shortage + 10,
         )
-    except Exception:
-        pass
+        extra = _random.sample(ai_qs, min(shortage, len(ai_qs))) if ai_qs else []
+        picked.extend(extra)
+        excl += [q["id"] for q in extra]
+
+    # 3. 仍不足且在线时，调用 AI 生成新题再取
+    shortage = count - len(picked)
+    if shortage > 0 and settings.is_online():
+        try:
+            from ai.question_generator import generate_questions
+            domain_id = _random.choice(domain_ids) if domain_ids else 1
+            console.print(f"  [dim]AI 生成补充题目中...[/dim]")
+            generate_questions(
+                domain_id,
+                difficulty=difficulty,
+                count=shortage + 3,
+                min_difficulty=settings.AI_GEN_MIN_DIFFICULTY,
+            )
+        except Exception:
+            pass
+        ai_qs2 = get_ai_unattempted_questions(
+            domain_ids=domain_ids, difficulty=difficulty,
+            exclude_ids=excl or None, limit=shortage + 10,
+        )
+        extra2 = _random.sample(ai_qs2, min(shortage, len(ai_qs2))) if ai_qs2 else []
+        picked.extend(extra2)
+        excl += [q["id"] for q in extra2]
+
+    # 4. 最终兜底：本地未做过的题（不含答对过的）
+    shortage = count - len(picked)
+    if shortage > 0:
+        fallback = get_questions_balanced(
+            domain_ids=domain_ids, difficulty=difficulty,
+            exclude_ids=excl or None, limit=shortage + 10, new_ratio=1.0,
+        )
+        extra3 = _random.sample(fallback, min(shortage, len(fallback))) if fallback else []
+        picked.extend(extra3)
+
+    _random.shuffle(picked)
+    return picked

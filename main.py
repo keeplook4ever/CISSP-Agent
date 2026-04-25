@@ -249,46 +249,24 @@ def _run_scheduled_mode_if_needed() -> None:
 
 # ─── 交互式主菜单 ────────────────────────────────────────────────
 
-def _check_api_key() -> bool:
-    """检查 ANTHROPIC_API_KEY 是否已配置，未配置则展示配置引导。
-    返回 True 表示可继续运行，False 表示用户选择退出去配置。"""
+def _check_api_key() -> None:
+    """检查 ANTHROPIC_API_KEY 是否已配置，未配置则立即提示并退出。"""
     if settings.is_online():
-        return True
+        return
 
     from rich.panel import Panel
     console.print(
         Panel(
-            "  [bold]未检测到 ANTHROPIC_API_KEY[/bold]\n\n"
-            "  API Key 是本系统的必要配置，缺少时以下功能将无法使用：\n"
-            "  · 题目耗尽时自动联网生成新题\n"
-            "  · 错题 AI 深度解析\n"
-            "  · 学习模式 AI 知识点讲解\n"
-            "  · 薄弱点 AI 智能分析\n\n"
-            "  [cyan bold]配置方法（二选一）：[/cyan bold]\n\n"
+            "  未检测到 [bold]ANTHROPIC_API_KEY[/bold]，请先配置后再启动。\n\n"
             "  方式 1 — 在项目根目录创建 [bold].env[/bold] 文件（推荐）：\n"
-            "    ANTHROPIC_API_KEY=sk-ant-api03-xxxx\n\n"
+            "    [cyan]ANTHROPIC_API_KEY=sk-ant-api03-xxxx[/cyan]\n\n"
             "  方式 2 — 设置系统环境变量：\n"
-            "    [dim]macOS/Linux:[/dim]  export ANTHROPIC_API_KEY=sk-ant-api03-xxxx\n"
-            "    [dim]Windows:[/dim]      set ANTHROPIC_API_KEY=sk-ant-api03-xxxx\n\n"
-            "  获取 API Key：[link=https://console.anthropic.com]console.anthropic.com[/link]",
-            title="[red]🔑  需要配置 API Key[/red]",
+            "    [cyan]export ANTHROPIC_API_KEY=sk-ant-api03-xxxx[/cyan]",
+            title="[red]缺少 API Key[/red]",
             border_style="red",
         )
     )
-
-    try:
-        raw = console.input(
-            "\n  [bold cyan][Enter][/bold cyan] 退出并配置  "
-            "[dim][c][/dim] 忽略警告继续（部分功能不可用）：  "
-        ).strip().lower()
-    except (EOFError, KeyboardInterrupt):
-        return False
-
-    if raw == "c":
-        console.print("  [yellow]⚠  以受限模式运行，题库耗尽后将无法自动补充题目[/yellow]\n")
-        return True
-
-    return False
+    sys.exit(1)
 
 
 def run_interactive() -> None:
@@ -300,8 +278,7 @@ def run_interactive() -> None:
         console.print("请先运行：[cyan]python main.py init[/cyan]")
         sys.exit(1)
 
-    if not _check_api_key():
-        sys.exit(0)
+    _check_api_key()
 
     from ui.cli.menus import print_main_banner, print_main_menu, prompt_menu_choice
     from modes.daily_diagnostic import run_daily_diagnostic

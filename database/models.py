@@ -178,6 +178,72 @@ def _fetch_balanced(
     return [dict(row) for row in cur.fetchall()]
 
 
+def get_wrong_questions(
+    domain_ids: Optional[list[int]] = None,
+    difficulty: Optional[int] = None,
+    exclude_ids: Optional[list[int]] = None,
+    limit: int = 50,
+) -> list[dict]:
+    """返回历史错题（最近一次作答结果为错：last_result=0）"""
+    conn = get_connection()
+    conds = ["q.is_active = 1", "qs.last_result = 0"]
+    params: list = []
+    if domain_ids:
+        ph = ",".join("?" * len(domain_ids))
+        conds.append(f"q.domain_id IN ({ph})")
+        params.extend(domain_ids)
+    if difficulty is not None:
+        conds.append("q.difficulty = ?")
+        params.append(difficulty)
+    if exclude_ids:
+        ph = ",".join("?" * len(exclude_ids))
+        conds.append(f"q.id NOT IN ({ph})")
+        params.extend(exclude_ids)
+    where = " AND ".join(conds)
+    cur = conn.execute(
+        f"SELECT q.* FROM questions q "
+        f"JOIN question_stats qs ON q.id = qs.question_id "
+        f"WHERE {where} ORDER BY RANDOM() LIMIT ?",
+        params + [limit],
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
+def get_ai_unattempted_questions(
+    domain_ids: Optional[list[int]] = None,
+    difficulty: Optional[int] = None,
+    exclude_ids: Optional[list[int]] = None,
+    limit: int = 50,
+) -> list[dict]:
+    """返回 AI 生成（source='claude'）且从未作答的题目"""
+    conn = get_connection()
+    conds = [
+        "q.is_active = 1",
+        "q.source = 'claude'",
+        "(qs.question_id IS NULL OR qs.is_attempted = 0)",
+    ]
+    params: list = []
+    if domain_ids:
+        ph = ",".join("?" * len(domain_ids))
+        conds.append(f"q.domain_id IN ({ph})")
+        params.extend(domain_ids)
+    if difficulty is not None:
+        conds.append("q.difficulty = ?")
+        params.append(difficulty)
+    if exclude_ids:
+        ph = ",".join("?" * len(exclude_ids))
+        conds.append(f"q.id NOT IN ({ph})")
+        params.extend(exclude_ids)
+    where = " AND ".join(conds)
+    cur = conn.execute(
+        f"SELECT q.* FROM questions q "
+        f"LEFT JOIN question_stats qs ON q.id = qs.question_id "
+        f"WHERE {where} ORDER BY RANDOM() LIMIT ?",
+        params + [limit],
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
 def count_unattempted_by_domain(domain_id: int) -> int:
     """返回某域未做过的题目数量（用于判断是否需要联网补充）"""
     conn = get_connection()

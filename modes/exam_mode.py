@@ -10,8 +10,9 @@ from rich.panel import Panel
 from config.settings import settings
 from config.domains import DOMAINS
 from database.models import (
-    get_questions, get_questions_balanced,
+    get_questions_balanced,
     create_session, finish_session, record_answer, update_daily_progress,
+    get_wrong_questions, get_ai_unattempted_questions,
 )
 from ui.cli.display import print_question, print_result, get_user_answer, shuffle_question
 from ui.cli.tables import print_session_summary
@@ -139,23 +140,48 @@ def run_exam() -> None:
 
 
 def _load_exam_questions() -> list[dict]:
-    """按权重从各域加载题目（80%新题+20%错题），保留难度混合，随机打乱"""
+    """按 80/20 比例从各域加载题目：80% 从未做过的新题 + 20% 历史错题，随机打乱"""
     all_questions = []
     for domain_id, target in DOMAIN_ALLOCATION.items():
-        # 用 balanced 策略拉取候选池（多拉供难度筛选使用）
-        qs = get_questions_balanced(
-            domain_ids=[domain_id],
-            limit=target + 20,
-            new_ratio=settings.QUESTION_NEW_RATIO,
+        # 严格 80/20 配额
+        n_wrong = max(1, round(target * 0.20))
+        n_new   = target - n_wrong
+
+        # --- 1. 取错题（严格限制在 n_wrong 以内）---
+        wrong_pool = get_wrong_questions(domain_ids=[domain_id], limit=n_wrong + 10)
+        wrong_selected = random.sample(wrong_pool, min(n_wrong, len(wrong_pool)))
+        excl = [q["id"] for q in wrong_selected]
+
+        # --- 2. 取新题（优先 AI 生成的未做过，再取普通未做过）---
+        ai_new = get_ai_unattempted_questions(
+            domain_ids=[domain_id], exclude_ids=excl or None, limit=n_new + 20,
         )
-        # 候选不足时回退全量
-        if len(qs) < target:
-            qs = get_questions(domain_ids=[domain_id], limit=target + 20)
+        excl += [q["id"] for q in ai_new]
+
+        local_new = get_questions_balanced(
+            domain_ids=[domain_id], exclude_ids=excl or None,
+            limit=n_new + 20, new_ratio=1.0,
+        )
+        excl += [q["id"] for q in local_new]
+
+        new_pool = ai_new + local_new
+        new_selected = random.sample(new_pool, min(n_new, len(new_pool)))
+
+        pool = wrong_selected + new_selected
+
+        # --- 3. 总量不足时，继续从未做过的题补充（不引入已做对的旧题）---
+        if len(pool) < target:
+            shortage = target - len(pool)
+            extra = get_questions_balanced(
+                domain_ids=[domain_id], exclude_ids=excl or None,
+                limit=shortage + 20, new_ratio=1.0,
+            )
+            pool += random.sample(extra, min(shortage, len(extra)))
 
         # 按难度混合：40%简单，40%中等，20%难
-        easy   = [q for q in qs if q.get("difficulty") == 1]
-        medium = [q for q in qs if q.get("difficulty") == 2]
-        hard   = [q for q in qs if q.get("difficulty") == 3]
+        easy   = [q for q in pool if q.get("difficulty") == 1]
+        medium = [q for q in pool if q.get("difficulty") == 2]
+        hard   = [q for q in pool if q.get("difficulty") == 3]
         n_easy   = int(target * 0.4)
         n_medium = int(target * 0.4)
         n_hard   = target - n_easy - n_medium
@@ -165,12 +191,14 @@ def _load_exam_questions() -> list[dict]:
             + random.sample(medium, min(n_medium, len(medium)))
             + random.sample(hard,   min(n_hard,   len(hard)))
         )
-        # 数量不足时用剩余题目补够
         used_ids = {q["id"] for q in selected}
-        remaining = [q for q in qs if q["id"] not in used_ids]
+        remaining = [q for q in pool if q["id"] not in used_ids]
         while len(selected) < target and remaining:
             selected.append(remaining.pop(0))
 
+        actual_wrong = len(wrong_selected)
+        actual_new   = len(new_selected)
+        print(f"[DEBUG] 域{domain_id}: target={target}, wrong={actual_wrong}({actual_wrong/target*100:.0f}%), new={actual_new}({actual_new/target*100:.0f}%), pool={len(pool)}, selected={len(selected[:target])}")
         all_questions.extend(selected[:target])
 
     random.shuffle(all_questions)
