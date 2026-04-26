@@ -12,10 +12,10 @@ from config.domains import DOMAINS
 from database.models import (
     get_questions_balanced,
     create_session, finish_session, record_answer, update_daily_progress,
-    get_wrong_questions, get_ai_unattempted_questions,
+    get_wrong_questions, get_ai_unattempted_questions, get_session_wrong_questions,
 )
 from ui.cli.display import print_question, print_result, get_user_answer, shuffle_question
-from ui.cli.tables import print_session_summary
+from ui.cli.tables import print_session_summary, print_wrong_review
 
 console = Console()
 
@@ -131,12 +131,16 @@ def run_exam() -> None:
         Panel(
             f"  换算分数：[{result_style}]{exam_score:.0f}[/{result_style}] / 1000\n"
             f"  [{result_style}]{result_text}[/{result_style}]\n"
-            f"  正确率：{acc*100:.1f}%  通过线：{settings.EXAM_PASS_SCORE}分\n\n"
-            "  提示：在'错题复习'模式中可查看本次错题解析",
+            f"  正确率：{acc*100:.1f}%  通过线：{settings.EXAM_PASS_SCORE}分",
             title="📊 考试结果",
             border_style="green" if passed else "red",
         )
     )
+
+    # 错题回顾
+    if answered > 0 and correct_count < answered:
+        wrong_qs = get_session_wrong_questions(session_id)
+        print_wrong_review(wrong_qs)
 
 
 def _load_exam_questions() -> list[dict]:

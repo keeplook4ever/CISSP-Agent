@@ -15,11 +15,11 @@ from config.settings import settings
 from database.models import (
     create_session, finish_session, record_answer,
     get_questions_balanced, get_domain_stats,
-    get_wrong_questions, get_ai_unattempted_questions,
+    get_wrong_questions, get_ai_unattempted_questions, get_session_wrong_questions,
 )
 from analysis.weakness_detector import detect_and_save_weaknesses
 from ui.cli.display import print_question, print_result, get_user_answer, shuffle_question
-from ui.cli.tables import print_weakness_table
+from ui.cli.tables import print_weakness_table, print_wrong_review
 
 console = Console()
 
@@ -132,6 +132,11 @@ def _run_diagnostic() -> None:
     weaknesses = detect_and_save_weaknesses()
     recs = _generate_recommendations(weaknesses)
     _show_results(results, weaknesses, recs)
+
+    # 错题回顾
+    if results["total"] > 0 and results["correct"] < results["total"]:
+        wrong_qs = get_session_wrong_questions(session_id)
+        print_wrong_review(wrong_qs)
 
     console.print("  [dim]按回车继续[/dim]")
     try:

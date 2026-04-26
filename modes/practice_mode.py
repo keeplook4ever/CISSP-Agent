@@ -9,10 +9,10 @@ from config.settings import settings
 from database.models import (
     get_questions_balanced,
     create_session, finish_session, record_answer, update_daily_progress,
-    get_wrong_questions, get_ai_unattempted_questions,
+    get_wrong_questions, get_ai_unattempted_questions, get_session_wrong_questions,
 )
 from ui.cli.display import print_question, print_result, get_user_answer, shuffle_question
-from ui.cli.tables import print_session_summary
+from ui.cli.tables import print_session_summary, print_wrong_review
 from ui.cli.menus import select_domain, select_difficulty
 from analysis.weakness_detector import detect_and_save_weaknesses
 
@@ -85,6 +85,11 @@ def run_practice(domain_ids: list[int] = None, difficulty: int = None, count: in
     update_daily_progress(answered, correct_count, duration // 60)
 
     print_session_summary(answered, correct_count, duration, "练习")
+
+    # 错题回顾
+    if answered > 0 and correct_count < answered:
+        wrong_qs = get_session_wrong_questions(session_id)
+        print_wrong_review(wrong_qs)
 
     # 薄弱点检测
     if answered > 0:

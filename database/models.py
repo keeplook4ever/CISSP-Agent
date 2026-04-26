@@ -555,3 +555,17 @@ def get_exam_sessions(limit: int = 10) -> list[dict]:
         (limit,),
     )
     return [dict(row) for row in cur.fetchall()]
+
+
+def get_session_wrong_questions(session_id: int) -> list[dict]:
+    """返回指定会话中答错的题目（含题目全量信息），按答题顺序排列"""
+    conn = get_connection()
+    cur = conn.execute(
+        """SELECT q.*, ar.user_answer, ar.correct_answer AS ar_correct
+           FROM answer_records ar
+           JOIN questions q ON ar.question_id = q.id
+           WHERE ar.session_id = ? AND ar.is_correct = 0
+           ORDER BY ar.id""",
+        (session_id,),
+    )
+    return [dict(row) for row in cur.fetchall()]

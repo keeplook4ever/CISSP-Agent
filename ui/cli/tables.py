@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from rich.console import Console
+from rich.panel import Panel
 from rich.table import Table
 from rich import box
 from rich.text import Text
@@ -139,3 +140,63 @@ def print_weakness_table(weaknesses: list[dict]) -> None:
             str(w.get("error_count", 0)),
         )
     console.print(table)
+
+
+def print_wrong_review(wrong_questions: list[dict]) -> None:
+    """答题结束后展示本次所有错题及解析"""
+    if not wrong_questions:
+        return
+
+    console.print(f"\n{'─'*50}")
+    console.print(
+        Panel(
+            f"  本次共答错 [bold red]{len(wrong_questions)}[/bold red] 题，以下是错题详情与解析",
+            title="📝 本次错题回顾",
+            border_style="red",
+            box=box.ROUNDED,
+        )
+    )
+
+    for i, q in enumerate(wrong_questions, 1):
+        opts = {
+            "A": q.get("option_a", ""),
+            "B": q.get("option_b", ""),
+            "C": q.get("option_c", ""),
+            "D": q.get("option_d", ""),
+        }
+        domain_id = q.get("domain_id", "")
+        subdomain = q.get("subdomain", "")
+        user_ans = q.get("user_answer", "?")
+        correct_ans = q.get("ar_correct") or q.get("correct", "?")
+        source_tag = " [dim][AI][/dim]" if q.get("source") == "claude" else ""
+
+        header = (
+            f"[bold red]错题 {i}[/bold red]  "
+            f"域{domain_id} · {subdomain}{source_tag}"
+        )
+        body = Text()
+        body.append(f"\n{q.get('question', '')}\n\n", style="bold white")
+        for label in ["A", "B", "C", "D"]:
+            if label == correct_ans:
+                body.append(f"  {label}. {opts[label]}\n", style="bold green")
+            elif label == user_ans:
+                body.append(f"  {label}. {opts[label]}\n", style="bold red")
+            else:
+                body.append(f"  {label}. {opts[label]}\n")
+
+        body.append(f"\n你选了 ", style="dim")
+        body.append(f"{user_ans}", style="bold red")
+        body.append(f"  ·  正确答案 ", style="dim")
+        body.append(f"{correct_ans}. {opts.get(correct_ans, '')}", style="bold green")
+
+        console.print(Panel(body, title=header, border_style="red", box=box.ROUNDED))
+
+        if q.get("explanation"):
+            console.print(
+                Panel(
+                    q["explanation"],
+                    title="💡 解析",
+                    border_style="yellow",
+                    padding=(0, 1),
+                )
+            )
