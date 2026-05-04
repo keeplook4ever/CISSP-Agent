@@ -18,7 +18,7 @@ from database.models import (
     get_wrong_questions, get_ai_unattempted_questions, get_session_wrong_questions,
 )
 from analysis.weakness_detector import detect_and_save_weaknesses
-from ui.cli.display import print_question, print_result, get_user_answer, shuffle_question
+from ui.cli.display import print_question, print_result, get_user_answer
 from ui.cli.tables import print_weakness_table, print_wrong_review
 
 console = Console()
@@ -263,7 +263,6 @@ def _run_answer_loop(questions: list[dict], session_id: int) -> dict:
     per_domain: dict[int, dict] = {}
 
     for idx, q in enumerate(questions, 1):
-        q = shuffle_question(q)
         print_question(q, idx, total)
         q_start = time.time()
         try:

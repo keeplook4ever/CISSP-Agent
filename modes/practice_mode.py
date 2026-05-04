@@ -11,7 +11,7 @@ from database.models import (
     create_session, finish_session, record_answer, update_daily_progress,
     get_wrong_questions, get_ai_unattempted_questions, get_session_wrong_questions,
 )
-from ui.cli.display import print_question, print_result, get_user_answer, shuffle_question
+from ui.cli.display import print_question, print_result, get_user_answer
 from ui.cli.tables import print_session_summary, print_wrong_review
 from ui.cli.menus import select_domain, select_difficulty
 from analysis.weakness_detector import detect_and_save_weaknesses
@@ -42,7 +42,6 @@ def run_practice(domain_ids: list[int] = None, difficulty: int = None, count: in
 
     try:
         for i, q in enumerate(questions, 1):
-            q = shuffle_question(q)
             q_start = time.time()
             print_question(q, i, count)
             user_ans = get_user_answer()

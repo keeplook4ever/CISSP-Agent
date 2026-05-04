@@ -20,22 +20,27 @@ def generate_questions(
     difficulty: int = None,
     count: int = 5,
     min_difficulty: int = 1,
+    force: bool = False,
 ) -> list[dict]:
     """调用 Claude 生成题目，成功则存入数据库返回题目列表。
     若该子域已有题目达到 MIN_QUESTIONS_PER_SUBDOMAIN，则跳过生成。
-    min_difficulty: 生成题目的最低难度（1=易,2=中,3=难），联网补充时建议传2。"""
+    min_difficulty: 生成题目的最低难度（1=易,2=中,3=难），联网补充时建议传2。
+    force: 为 True 时跳过阈值检查，强制生成 count 道题（考试模式使用）。"""
     domain = DOMAINS.get(domain_id, {})
     domain_name = domain.get("name", f"域{domain_id}")
     sub = subdomain or random.choice(domain.get("subdomains", [domain_name]))
     diff = difficulty or random.randint(max(min_difficulty, 1), 3)
     diff_map = {1: "基础", 2: "中级", 3: "高级"}
 
-    # 检查本地已有题数，计算实际需要生成的数量
-    existing = count_questions_by_subdomain(domain_id, sub)
-    needed = max(0, settings.MIN_QUESTIONS_PER_SUBDOMAIN - existing)
-    actual_count = min(count, needed)
-    if actual_count <= 0:
-        return []  # 本地已满足阈值，无需消耗 token
+    if force:
+        actual_count = count
+    else:
+        # 检查本地已有题数，计算实际需要生成的数量
+        existing = count_questions_by_subdomain(domain_id, sub)
+        needed = max(0, settings.MIN_QUESTIONS_PER_SUBDOMAIN - existing)
+        actual_count = min(count, needed)
+        if actual_count <= 0:
+            return []  # 本地已满足阈值，无需消耗 token
 
     user_msg = (
         f"请为CISSP域{domain_id}【{domain_name}】中的子域【{sub}】"
@@ -72,6 +77,8 @@ def generate_questions(
         q["source"] = "claude"
         # 始终用 UUID 生成唯一 ID，避免 AI 返回重复 ID 导致 INSERT OR IGNORE 跳过
         q["id"] = f"AI-D{domain_id}-{uuid.uuid4().hex[:8]}"
+        # 入库前随机化选项顺序，correct 和解析同步绑定，避免运行时标签空间混乱
+        q = _randomize_options(q)
         try:
             row_id = insert_question(q)
             if row_id:  # INSERT OR IGNORE 跳过时 lastrowid=0，不计入 saved
@@ -79,6 +86,48 @@ def generate_questions(
         except Exception:
             pass
     return saved
+
+
+def _randomize_options(q: dict) -> dict:
+    """入库前随机化选项顺序，同步更新 correct 和解析中的字母引用。"""
+    import re
+    labels = ["A", "B", "C", "D"]
+    order = labels[:]
+    random.shuffle(order)
+    # order[i] = 旧标签，labels[i] = 新标签
+    old_to_new = {old: new for new, old in zip(labels, order)}
+    opts = q["options"]
+    new_opts = {labels[i]: opts[order[i]] for i in range(4)}
+    new_correct = old_to_new[q["correct"]]
+
+    explanation = q.get("explanation", "")
+    if explanation:
+        ph = {old: f"\x00{new}\x00" for old, new in old_to_new.items()}
+        # 1. "A项" / "A选项" / "A错误" / "A正确"
+        explanation = re.sub(
+            r'([ABCD])(?=[项选错正])',
+            lambda m: ph.get(m.group(1), m.group(1)),
+            explanation,
+        )
+        # 2. "选项A"
+        explanation = re.sub(
+            r'(?<=选项)([ABCD])',
+            lambda m: ph.get(m.group(1), m.group(1)),
+            explanation,
+        )
+        # 3. "答案A" / "答案(A)" / "答案（A）"
+        explanation = re.sub(
+            r'(?<=答案)([（(]?)([ABCD])',
+            lambda m: m.group(1) + ph.get(m.group(2), m.group(2)),
+            explanation,
+        )
+        explanation = explanation.replace("\x00", "")
+
+    result = dict(q)
+    result["options"] = new_opts
+    result["correct"] = new_correct
+    result["explanation"] = explanation
+    return result
 
 
 def fill_question_bank(
