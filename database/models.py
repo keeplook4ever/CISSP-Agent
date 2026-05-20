@@ -374,8 +374,10 @@ def get_domain_stats(domain_id: Optional[int] = None) -> list[dict]:
 def get_recent_wrong_questions(days: int = 14, limit: int = 50) -> list[dict]:
     conn = get_connection()
     cur = conn.execute(
-        """SELECT ar.*, q.question, q.option_a, q.option_b, q.option_c, q.option_d,
-                  q.explanation, q.subdomain as q_subdomain
+        """SELECT q.id, q.domain_id, q.subdomain, q.difficulty, q.source,
+                  q.question, q.option_a, q.option_b, q.option_c, q.option_d,
+                  q.correct, q.explanation, q.tags,
+                  ar.user_answer, ar.answered_at
            FROM answer_records ar
            JOIN questions q ON ar.question_id = q.id
            WHERE ar.is_correct = 0
