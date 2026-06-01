@@ -146,6 +146,14 @@ def fill_bank(domain, target, batch):
 
 
 @cli.command()
+def sprint():
+    """考前冲刺：错题 + 中高难度未做题集中突破"""
+    bootstrap()
+    from modes.sprint_mode import run_sprint
+    run_sprint()
+
+
+@cli.command()
 def report():
     """查看学习报告"""
     bootstrap()
@@ -250,23 +258,35 @@ def _run_scheduled_mode_if_needed() -> None:
 # ─── 交互式主菜单 ────────────────────────────────────────────────
 
 def _check_api_key() -> None:
-    """检查 ANTHROPIC_API_KEY 是否已配置，未配置则立即提示并退出。"""
+    """检查 ANTHROPIC_API_KEY；未配置时提示用户选择离线继续或退出。"""
     if settings.is_online():
         return
 
     from rich.panel import Panel
     console.print(
         Panel(
-            "  未检测到 [bold]ANTHROPIC_API_KEY[/bold]，请先配置后再启动。\n\n"
-            "  方式 1 — 在项目根目录创建 [bold].env[/bold] 文件（推荐）：\n"
-            "    [cyan]ANTHROPIC_API_KEY=sk-ant-api03-xxxx[/cyan]\n\n"
-            "  方式 2 — 设置系统环境变量：\n"
-            "    [cyan]export ANTHROPIC_API_KEY=sk-ant-api03-xxxx[/cyan]",
-            title="[red]缺少 API Key[/red]",
-            border_style="red",
+            "  未检测到 [bold]ANTHROPIC_API_KEY[/bold]，AI 相关功能（学习讲解、答案解析等）将不可用。\n\n"
+            "  配置方式：\n"
+            "    方式 1 — 项目根目录创建 [bold].env[/bold] 文件：\n"
+            "             [cyan]ANTHROPIC_API_KEY=sk-ant-api03-xxxx[/cyan]\n"
+            "    方式 2 — 设置系统环境变量：\n"
+            "             [cyan]export ANTHROPIC_API_KEY=sk-ant-api03-xxxx[/cyan]\n\n"
+            "  [bold yellow][O][/bold yellow] 以离线模式继续（仅刷题，无 AI 功能）\n"
+            "  [bold red][Q][/bold red] 退出并配置 Key 后重启",
+            title="[yellow]⚠  未配置 API Key[/yellow]",
+            border_style="yellow",
         )
     )
-    sys.exit(1)
+    while True:
+        try:
+            raw = console.input("  请选择 [O/Q]：").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            sys.exit(0)
+        if raw in ("o", ""):
+            console.print("  [dim]以离线模式运行，AI 功能将被跳过[/dim]\n")
+            return
+        if raw in ("q", "quit", "exit"):
+            sys.exit(0)
 
 
 def run_interactive() -> None:
@@ -282,6 +302,10 @@ def run_interactive() -> None:
 
     from ui.cli.menus import print_main_banner, print_main_menu, prompt_menu_choice
     from modes.daily_diagnostic import run_daily_diagnostic
+    from modes.player_mode import maybe_select_player
+    from database.player_manager import get_current_player_name
+
+    maybe_select_player()
     run_daily_diagnostic()
 
     _run_scheduled_mode_if_needed()
@@ -290,9 +314,15 @@ def run_interactive() -> None:
         try:
             current_day = get_current_day_number()
             print_main_banner(current_day, settings.TOTAL_DAYS)
-            print_main_menu(online=settings.is_online())
+            from database.models import get_sprint_stats
+            sprint_stats = get_sprint_stats()
+            print_main_menu(
+                online=settings.is_online(),
+                sprint_total=sprint_stats["total"],
+                player_name=get_current_player_name(),
+            )
 
-            choice = prompt_menu_choice(["0", "1", "2", "3", "4", "5", "6"])
+            choice = prompt_menu_choice(["0", "1", "2", "3", "4", "5", "6", "7", "8"])
 
             if choice == "0":
                 console.print("\n  [dim]再见！祝考试顺利 🎓[/dim]\n")
@@ -315,6 +345,12 @@ def run_interactive() -> None:
             elif choice == "6":
                 from plan.study_plan import show_plan
                 show_plan()
+            elif choice == "7":
+                from modes.sprint_mode import run_sprint
+                run_sprint()
+            elif choice == "8":
+                from modes.player_mode import run_player_management
+                run_player_management()
 
         except KeyboardInterrupt:
             console.print("\n  [dim]按 0 退出[/dim]")

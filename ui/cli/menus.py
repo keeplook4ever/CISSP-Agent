@@ -25,10 +25,19 @@ def print_main_banner(current_day: int, total_days: int) -> None:
     )
 
 
-def print_main_menu(online: bool = False) -> None:
+def print_main_menu(
+    online: bool = False,
+    sprint_total: int = 0,
+    player_name: str = "",
+) -> None:
     """打印主菜单"""
     mode = "[green]在线 AI[/green]" if online else "[yellow]离线[/yellow]"
-    console.print(f"\n  模式：{mode}\n")
+    player_str = f"  玩家：[bold cyan]{player_name}[/bold cyan]" if player_name else ""
+    console.print(f"\n  模式：{mode}{player_str}\n")
+    sprint_hint = (
+        f"错题+中高难度未做，共 [bold red]{sprint_total}[/bold red] 题"
+        if sprint_total > 0 else "冲刺池已清空"
+    )
     options = [
         ("[bold]1[/bold]", "📖 学习模式", "知识点讲解（AI）"),
         ("[bold]2[/bold]", "✏️  练习模式", "选域刷题"),
@@ -36,6 +45,8 @@ def print_main_menu(online: bool = False) -> None:
         ("[bold]4[/bold]", "🔄 错题复习", "薄弱点强化"),
         ("[bold]5[/bold]", "📊 学习报告", "进度统计"),
         ("[bold]6[/bold]", "📅 50天计划", "查看/生成"),
+        ("[bold red]7[/bold red]", "[bold red]⚡ 考前冲刺[/bold red]", sprint_hint),
+        ("[bold]8[/bold]", "👥 多人模式", "切换玩家 / 一键重开"),
         ("[bold]0[/bold]", "🚪 退出", ""),
     ]
     for key, label, hint in options:

@@ -5,6 +5,7 @@ from datetime import date, datetime
 from typing import Optional
 
 from database.connection import get_connection
+from database.player_manager import get_current_player_id
 
 
 # ───────────── 题库操作 ─────────────
@@ -68,10 +69,14 @@ def get_question_by_id(question_id: int) -> Optional[dict]:
 
 
 def get_mastered_question_ids() -> list[int]:
-    """返回至少答对过一次的题目 ID 列表（用于过滤已掌握题目）"""
+    """返回当前玩家至少答对过一次的题目 ID 列表"""
     conn = get_connection()
+    pid = get_current_player_id()
     cur = conn.execute(
-        "SELECT DISTINCT question_id FROM answer_records WHERE is_correct = 1"
+        """SELECT DISTINCT ar.question_id FROM answer_records ar
+           JOIN study_sessions ss ON ar.session_id = ss.id
+           WHERE ar.is_correct = 1 AND ss.player_id = ?""",
+        (pid,),
     )
     return [row["question_id"] for row in cur.fetchall()]
 
@@ -83,17 +88,13 @@ def get_questions_balanced(
     limit: int = 20,
     new_ratio: float = 0.8,
 ) -> list[dict]:
-    """按 new_ratio/wrong_ratio 出题：
-    - new_ratio 部分：从未做过的题（question_stats 中不存在或 is_attempted=0）
-    - 剩余部分：从上次答错的题（last_result=0）
-    - 不足时自动回退到全量随机
-    """
+    """按 new_ratio/wrong_ratio 出题（按当前玩家答题记录过滤）"""
     import random as _random
     conn = get_connection()
+    pid = get_current_player_id()
     n_new = max(1, int(limit * new_ratio))
     n_wrong = limit - n_new
 
-    # 构建基础 WHERE 条件（作用于 questions 表别名 q）
     base_conds = ["q.is_active = 1"]
     base_params: list = []
     if domain_ids:
@@ -108,17 +109,14 @@ def get_questions_balanced(
         base_conds.append(f"q.id NOT IN ({ph})")
         base_params.extend(exclude_ids)
 
-    # 拉取新题（未做过：LEFT JOIN 后 qs.question_id IS NULL 或 is_attempted=0）
     new_qs = _fetch_balanced(
-        conn, base_conds, base_params,
+        conn, base_conds, base_params, pid,
         extra="(qs.question_id IS NULL OR qs.is_attempted = 0)",
         use_join=True,
         limit=n_new + 10,
     )
-
-    # 拉取错题（上次答错：last_result=0），排除已选新题
     wrong_qs = _fetch_balanced(
-        conn, base_conds, base_params,
+        conn, base_conds, base_params, pid,
         extra="qs.last_result = 0",
         use_join=True,
         limit=n_wrong + 10,
@@ -130,12 +128,11 @@ def get_questions_balanced(
         + _random.sample(wrong_qs, min(n_wrong, len(wrong_qs)))
     )
 
-    # 不足时用全量随机补充
     shortage = limit - len(selected)
     if shortage > 0:
         have_ids = [q["id"] for q in selected]
         fallback = _fetch_balanced(
-            conn, base_conds, base_params,
+            conn, base_conds, base_params, pid,
             extra=None,
             use_join=False,
             limit=shortage + 10,
@@ -151,12 +148,12 @@ def _fetch_balanced(
     conn,
     base_conds: list,
     base_params: list,
+    player_id: int,
     extra: Optional[str],
     use_join: bool,
     limit: int,
     extra_exclude: Optional[list[int]] = None,
 ) -> list[dict]:
-    """内部辅助：按条件从题库拉取题目"""
     conds = list(base_conds)
     params = list(base_params)
     if extra_exclude:
@@ -167,14 +164,16 @@ def _fetch_balanced(
         conds.append(extra)
     where = " AND ".join(conds)
     if use_join:
+        # JOIN 条件加入 player_id，使 LEFT JOIN 对当前玩家透明
         sql = (
             "SELECT q.* FROM questions q "
-            "LEFT JOIN question_stats qs ON q.id = qs.question_id "
+            f"LEFT JOIN question_stats qs ON q.id = qs.question_id AND qs.player_id = ? "
             f"WHERE {where} ORDER BY RANDOM() LIMIT ?"
         )
+        cur = conn.execute(sql, [player_id] + params + [limit])
     else:
         sql = f"SELECT q.* FROM questions q WHERE {where} ORDER BY RANDOM() LIMIT ?"
-    cur = conn.execute(sql, params + [limit])
+        cur = conn.execute(sql, params + [limit])
     return [dict(row) for row in cur.fetchall()]
 
 
@@ -184,10 +183,11 @@ def get_wrong_questions(
     exclude_ids: Optional[list[int]] = None,
     limit: int = 50,
 ) -> list[dict]:
-    """返回历史错题（最近一次作答结果为错：last_result=0）"""
+    """返回当前玩家历史错题（最近一次作答结果为错：last_result=0）"""
     conn = get_connection()
-    conds = ["q.is_active = 1", "qs.last_result = 0"]
-    params: list = []
+    pid = get_current_player_id()
+    conds = ["q.is_active = 1", "qs.last_result = 0", "qs.player_id = ?"]
+    params: list = [pid]
     if domain_ids:
         ph = ",".join("?" * len(domain_ids))
         conds.append(f"q.domain_id IN ({ph})")
@@ -215,8 +215,9 @@ def get_ai_unattempted_questions(
     exclude_ids: Optional[list[int]] = None,
     limit: int = 50,
 ) -> list[dict]:
-    """返回 AI 生成（source='claude'）且从未作答的题目"""
+    """返回 AI 生成且当前玩家从未作答的题目"""
     conn = get_connection()
+    pid = get_current_player_id()
     conds = [
         "q.is_active = 1",
         "q.source = 'claude'",
@@ -237,22 +238,23 @@ def get_ai_unattempted_questions(
     where = " AND ".join(conds)
     cur = conn.execute(
         f"SELECT q.* FROM questions q "
-        f"LEFT JOIN question_stats qs ON q.id = qs.question_id "
+        f"LEFT JOIN question_stats qs ON q.id = qs.question_id AND qs.player_id = ? "
         f"WHERE {where} ORDER BY RANDOM() LIMIT ?",
-        params + [limit],
+        [pid] + params + [limit],
     )
     return [dict(row) for row in cur.fetchall()]
 
 
 def count_unattempted_by_domain(domain_id: int) -> int:
-    """返回某域未做过的题目数量（用于判断是否需要联网补充）"""
+    """返回当前玩家在某域未做过的题目数量"""
     conn = get_connection()
+    pid = get_current_player_id()
     cur = conn.execute(
         """SELECT COUNT(*) as cnt FROM questions q
-           LEFT JOIN question_stats qs ON q.id = qs.question_id
+           LEFT JOIN question_stats qs ON q.id = qs.question_id AND qs.player_id = ?
            WHERE q.domain_id = ? AND q.is_active = 1
              AND (qs.question_id IS NULL OR qs.is_attempted = 0)""",
-        (domain_id,),
+        (pid, domain_id),
     )
     row = cur.fetchone()
     return row["cnt"] if row else 0
@@ -270,9 +272,10 @@ def count_questions_by_domain() -> dict[int, int]:
 
 def create_session(session_type: str, domain_filter: list[int] = None) -> int:
     conn = get_connection()
+    pid = get_current_player_id()
     cur = conn.execute(
-        "INSERT INTO study_sessions (session_type, domain_filter) VALUES (?,?)",
-        (session_type, json.dumps(domain_filter or [])),
+        "INSERT INTO study_sessions (session_type, domain_filter, player_id) VALUES (?,?,?)",
+        (session_type, json.dumps(domain_filter or []), pid),
     )
     conn.commit()
     return cur.lastrowid
@@ -310,6 +313,7 @@ def record_answer(
     time_spent: int,
 ) -> None:
     conn = get_connection()
+    pid = get_current_player_id()
     conn.execute(
         """INSERT INTO answer_records
            (session_id, question_id, domain_id, subdomain, difficulty,
@@ -318,22 +322,19 @@ def record_answer(
         (session_id, question_id, domain_id, subdomain, difficulty,
          user_answer, correct_answer, int(is_correct), time_spent),
     )
-    # 更新域统计
-    _update_domain_stats(conn, domain_id, is_correct, time_spent)
-    # 更新题目状态追踪
-    _upsert_question_stats(conn, question_id, is_correct)
+    _update_domain_stats(conn, pid, domain_id, is_correct, time_spent)
+    _upsert_question_stats(conn, pid, question_id, is_correct)
     conn.commit()
 
 
-def _upsert_question_stats(conn: sqlite3.Connection, question_id: int, is_correct: bool) -> None:
-    """每次答题后同步更新题目状态（is_attempted、last_result、last_answered_at 等）"""
+def _upsert_question_stats(conn: sqlite3.Connection, player_id: int, question_id: int, is_correct: bool) -> None:
     wrong_delta = 0 if is_correct else 1
     conn.execute(
         """INSERT INTO question_stats
-               (question_id, is_attempted, last_result, last_answered_at,
+               (player_id, question_id, is_attempted, last_result, last_answered_at,
                 attempt_count, correct_count, wrong_count)
-           VALUES (?, 1, ?, CURRENT_TIMESTAMP, 1, ?, ?)
-           ON CONFLICT(question_id) DO UPDATE SET
+           VALUES (?, ?, 1, ?, CURRENT_TIMESTAMP, 1, ?, ?)
+           ON CONFLICT(player_id, question_id) DO UPDATE SET
                is_attempted     = 1,
                last_result      = excluded.last_result,
                last_answered_at = CURRENT_TIMESTAMP,
@@ -341,11 +342,11 @@ def _upsert_question_stats(conn: sqlite3.Connection, question_id: int, is_correc
                correct_count    = correct_count + excluded.correct_count,
                wrong_count      = wrong_count + excluded.wrong_count,
                updated_at       = CURRENT_TIMESTAMP""",
-        (question_id, int(is_correct), int(is_correct), wrong_delta),
+        (player_id, question_id, int(is_correct), int(is_correct), wrong_delta),
     )
 
 
-def _update_domain_stats(conn: sqlite3.Connection, domain_id: int, is_correct: bool, time_spent: int) -> None:
+def _update_domain_stats(conn: sqlite3.Connection, player_id: int, domain_id: int, is_correct: bool, time_spent: int) -> None:
     conn.execute(
         """UPDATE domain_stats SET
            total_attempts = total_attempts + 1,
@@ -354,8 +355,8 @@ def _update_domain_stats(conn: sqlite3.Connection, domain_id: int, is_correct: b
            avg_time_sec = (avg_time_sec * total_attempts + ?) / (total_attempts + 1),
            last_practiced = CURRENT_TIMESTAMP,
            updated_at = CURRENT_TIMESTAMP
-           WHERE domain_id = ?""",
-        (int(is_correct), int(is_correct), time_spent, domain_id),
+           WHERE player_id = ? AND domain_id = ?""",
+        (int(is_correct), int(is_correct), time_spent, player_id, domain_id),
     )
 
 
@@ -363,16 +364,24 @@ def _update_domain_stats(conn: sqlite3.Connection, domain_id: int, is_correct: b
 
 def get_domain_stats(domain_id: Optional[int] = None) -> list[dict]:
     conn = get_connection()
+    pid = get_current_player_id()
     if domain_id:
-        cur = conn.execute("SELECT * FROM domain_stats WHERE domain_id=?", (domain_id,))
+        cur = conn.execute(
+            "SELECT * FROM domain_stats WHERE player_id=? AND domain_id=?",
+            (pid, domain_id),
+        )
         row = cur.fetchone()
         return [dict(row)] if row else []
-    cur = conn.execute("SELECT * FROM domain_stats ORDER BY domain_id")
+    cur = conn.execute(
+        "SELECT * FROM domain_stats WHERE player_id=? ORDER BY domain_id",
+        (pid,),
+    )
     return [dict(row) for row in cur.fetchall()]
 
 
 def get_recent_wrong_questions(days: int = 14, limit: int = 50) -> list[dict]:
     conn = get_connection()
+    pid = get_current_player_id()
     cur = conn.execute(
         """SELECT q.id, q.domain_id, q.subdomain, q.difficulty, q.source,
                   q.question, q.option_a, q.option_b, q.option_c, q.option_d,
@@ -380,11 +389,13 @@ def get_recent_wrong_questions(days: int = 14, limit: int = 50) -> list[dict]:
                   ar.user_answer, ar.answered_at
            FROM answer_records ar
            JOIN questions q ON ar.question_id = q.id
+           JOIN study_sessions ss ON ar.session_id = ss.id
            WHERE ar.is_correct = 0
+             AND ss.player_id = ?
              AND ar.answered_at >= datetime('now', ?)
            ORDER BY ar.answered_at DESC
            LIMIT ?""",
-        (f"-{days} days", limit),
+        (pid, f"-{days} days", limit),
     )
     return [dict(row) for row in cur.fetchall()]
 
@@ -393,24 +404,27 @@ def get_recent_wrong_questions(days: int = 14, limit: int = 50) -> list[dict]:
 
 def update_daily_progress(questions_done: int, correct: int, minutes: int) -> None:
     conn = get_connection()
+    pid = get_current_player_id()
     today = date.today().isoformat()
     conn.execute(
-        """INSERT INTO daily_progress (study_date, questions_done, correct_count, minutes_studied, sessions_count)
-           VALUES (?, ?, ?, ?, 1)
-           ON CONFLICT(study_date) DO UPDATE SET
-               questions_done = questions_done + excluded.questions_done,
-               correct_count  = correct_count  + excluded.correct_count,
-               minutes_studied= minutes_studied + excluded.minutes_studied,
-               sessions_count = sessions_count + 1""",
-        (today, questions_done, correct, minutes),
+        """INSERT INTO daily_progress (player_id, study_date, questions_done, correct_count, minutes_studied, sessions_count)
+           VALUES (?, ?, ?, ?, ?, 1)
+           ON CONFLICT(player_id, study_date) DO UPDATE SET
+               questions_done  = questions_done  + excluded.questions_done,
+               correct_count   = correct_count   + excluded.correct_count,
+               minutes_studied = minutes_studied + excluded.minutes_studied,
+               sessions_count  = sessions_count  + 1""",
+        (pid, today, questions_done, correct, minutes),
     )
     conn.commit()
 
 
 def get_daily_progress(days: int = 7) -> list[dict]:
     conn = get_connection()
+    pid = get_current_player_id()
     cur = conn.execute(
-        "SELECT * FROM daily_progress ORDER BY study_date DESC LIMIT ?", (days,)
+        "SELECT * FROM daily_progress WHERE player_id=? ORDER BY study_date DESC LIMIT ?",
+        (pid, days),
     )
     return [dict(row) for row in cur.fetchall()]
 
@@ -548,13 +562,78 @@ def count_questions_by_subdomain(domain_id: int, subdomain: str) -> int:
     return row["cnt"] if row else 0
 
 
+def get_sprint_pool(domain_ids: Optional[list[int]] = None) -> tuple[list[dict], list[dict]]:
+    """获取当前玩家冲刺题池：
+    返回 (wrong_questions, unattempted_medium_hard)
+    """
+    conn = get_connection()
+    pid = get_current_player_id()
+
+    conds_w = ["q.is_active = 1", "qs.last_result = 0", "qs.player_id = ?"]
+    params_w: list = [pid]
+    if domain_ids:
+        ph = ",".join("?" * len(domain_ids))
+        conds_w.append(f"q.domain_id IN ({ph})")
+        params_w.extend(domain_ids)
+    where_w = " AND ".join(conds_w)
+    cur = conn.execute(
+        f"SELECT q.*, qs.wrong_count FROM questions q "
+        f"JOIN question_stats qs ON q.id = qs.question_id "
+        f"WHERE {where_w} ORDER BY qs.wrong_count DESC, q.difficulty DESC",
+        params_w,
+    )
+    wrong = [dict(row) for row in cur.fetchall()]
+
+    conds_n = [
+        "q.is_active = 1",
+        "q.difficulty >= 2",
+        "(qs.question_id IS NULL OR qs.is_attempted = 0)",
+    ]
+    params_n: list = []
+    if domain_ids:
+        ph = ",".join("?" * len(domain_ids))
+        conds_n.append(f"q.domain_id IN ({ph})")
+        params_n.extend(domain_ids)
+    where_n = " AND ".join(conds_n)
+    cur = conn.execute(
+        f"SELECT q.* FROM questions q "
+        f"LEFT JOIN question_stats qs ON q.id = qs.question_id AND qs.player_id = ? "
+        f"WHERE {where_n} ORDER BY q.difficulty DESC, RANDOM()",
+        [pid] + params_n,
+    )
+    unattempted = [dict(row) for row in cur.fetchall()]
+
+    return wrong, unattempted
+
+
+def get_sprint_stats(domain_ids: Optional[list[int]] = None) -> dict:
+    """统计冲刺池信息，用于仪表盘展示"""
+    wrong, unattempted = get_sprint_pool(domain_ids=domain_ids)
+    breakdown: dict[int, dict] = {}
+    for q in wrong:
+        did = q.get("domain_id", 0)
+        breakdown.setdefault(did, {"wrong": 0, "unattempted": 0})
+        breakdown[did]["wrong"] += 1
+    for q in unattempted:
+        did = q.get("domain_id", 0)
+        breakdown.setdefault(did, {"wrong": 0, "unattempted": 0})
+        breakdown[did]["unattempted"] += 1
+    return {
+        "wrong_count": len(wrong),
+        "unattempted_count": len(unattempted),
+        "total": len(wrong) + len(unattempted),
+        "domain_breakdown": breakdown,
+    }
+
+
 def get_exam_sessions(limit: int = 10) -> list[dict]:
     conn = get_connection()
+    pid = get_current_player_id()
     cur = conn.execute(
         """SELECT * FROM study_sessions
-           WHERE session_type='exam' AND is_completed=1
+           WHERE session_type='exam' AND is_completed=1 AND player_id=?
            ORDER BY started_at DESC LIMIT ?""",
-        (limit,),
+        (pid, limit),
     )
     return [dict(row) for row in cur.fetchall()]
 
